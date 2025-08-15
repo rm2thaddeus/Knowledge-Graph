@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Detection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .result { background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; }
+        .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Edge Detection Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Edge File Detection</h2>
+        <p>This page tests whether your edge CSV files are being detected correctly.</p>
+        
+        <button onclick="testEdgeDetection()">Test Edge Detection</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // Test data that matches your actual CSV format
+        const testEdgeCSV = `source_id, target_id, relation, source, source_type, confidence, provenance
+Person1, Role1, "holds_role", CV_with_portfolio.pdf, cv, High, "Jun 2022 Apr 2025 … Business Intelligence Consultant - Filtration Portfolio"
+Person1, Role2, "holds_role", CV_with_portfolio.pdf, cv, High, "Jun 2021 Jun 2022 … Postdoctoral Researcher - ACDC EU project"`;
+
+        const testNodeCSV = `id, name, node_type, source, source_type, confidence, provenance
+Person1, "Aitor Patiño Diaz", Person, ATS_and_Human.pdf, cv, High, "Aitor Patiño Diaz Phone: +33 7 82 16 22 64 Email: aitorpatinodiaz@gmail.com LinkedIn: linkedin.com/in/aitorp/"
+Role1, "Business Intelligence Consultant - Filtration", Role, CV_with_portfolio.pdf, cv, High, "Jun 2022 Apr 2025"`;
+
+        function testEdgeDetection() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h3>Testing Edge Detection...</h3>';
+
+            try {
+                // Test edge file detection
+                const edgeData = parseCSV(testEdgeCSV);
+                const edgeHeaders = edgeData.length ? Object.keys(edgeData[0]) : [];
+                const normalize = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+                const normHeaders = new Set(edgeHeaders.map(normalize));
+                
+                const hasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normHeaders.has(k));
+                const hasEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+                const hasSourceTargetPattern = ['source_id','target_id','sourceid','targetid'].some(k => normHeaders.has(k));
+                
+                let html = '<div class="success">✅ Edge CSV parsing successful!</div>';
+                html += '<div class="result"><strong>Edge file headers:</strong><br>';
+                html += `Headers: ${edgeHeaders.join(', ')}<br>`;
+                html += `Has node fields: ${hasNodeFields}<br>`;
+                html += `Has edge fields: ${hasEdgeFields}<br>`;
+                html += `Has source_id/target_id pattern: ${hasSourceTargetPattern}<br>`;
+                html += `File type: ${hasEdgeFields || hasSourceTargetPattern ? 'EDGE' : 'UNKNOWN'}</div>';
+                
+                html += '<div class="result"><strong>Parsed edge data:</strong><br>';
+                html += '<pre>' + JSON.stringify(edgeData, null, 2) + '</pre></div>';
+                
+                // Test node file detection
+                const nodeData = parseCSV(testNodeCSV);
+                const nodeHeaders = nodeData.length ? Object.keys(nodeData[0]) : [];
+                const normNodeHeaders = new Set(nodeHeaders.map(normalize));
+                
+                const nodeHasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normNodeHeaders.has(k));
+                const nodeHasEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].some(k => normNodeHeaders.has(k));
+                
+                html += '<div class="result"><strong>Node file detection:</strong><br>';
+                html += `Headers: ${nodeHeaders.join(', ')}<br>`;
+                html += `Has node fields: ${nodeHasNodeFields}<br>`;
+                html += `Has edge fields: ${nodeHasEdgeFields}<br>`;
+                html += `File type: ${nodeHasNodeFields && !nodeHasEdgeFields ? 'NODE' : 'UNKNOWN'}</div>';
+                
+                // Test the actual column finding logic
+                html += '<div class="result"><strong>Column extraction test:</strong><br>';
+                if (edgeData.length > 0) {
+                    const row = edgeData[0];
+                    const source = findColumn(row, ['source', 'source_id', 'sourceid', 'from', 'start', 'src', 'head', 'subject', 's']);
+                    const target = findColumn(row, ['target', 'target_id', 'targetid', 'to', 'end', 'dst', 'tail', 'object', 'o']);
+                    const relation = findColumn(row, ['relation', 'relationship', 'rel', 'edge', 'edge_type', 'type', 'predicate', 'label']);
+                    
+                    html += `Source found: "${source}"<br>`;
+                    html += `Target found: "${target}"<br>`;
+                    html += `Relation found: "${relation}"<br>`;
+                    
+                    if (source && target) {
+                        html += '<div class="success">✅ Link extraction successful!</div>';
+                    } else {
+                        html += '<div class="error">❌ Link extraction failed - missing source or target</div>';
+                    }
+                }
+                
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                console.error('Edge detection error:', error);
+            }
+        }
+
+        // Helper functions (copied from your dataLoader.ts)
+        function parseCSV(text) {
+            const input = String(text || "").replace(/^\ufeff/, "").trim();
+            const lines = input.split(/\r?\n/);
+            
+            function splitLine(line, delimiter) {
+                const parts = [];
+                let cur = "";
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') {
+                        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
+                        inQuotes = !inQuotes; continue;
+                    }
+                    if (ch === delimiter && !inQuotes) {
+                        parts.push(cur);
+                        cur = "";
+                    } else {
+                        cur += ch;
+                    }
+                }
+                parts.push(cur);
+                return parts.map((v) => String(v).replace(/^\"|\"$/g, "").trim());
+            }
+            
+            const candidates = [",", ";", "\t"];
+            const headerLine = lines[0] || "";
+            let bestDelim = ",";
+            let bestCount = 1;
+            for (const d of candidates) {
+                const parts = splitLine(headerLine, d);
+                if (parts.length > bestCount) {
+                    bestCount = parts.length;
+                    bestDelim = d;
+                }
+            }
+            
+            const rows = lines.map((line) => splitLine(line, bestDelim));
+            const maxColumns = Math.max(...rows.map(row => row.length));
+            const paddedRows = rows.map(row => {
+                while (row.length < maxColumns) {
+                    row.push("");
+                }
+                return row;
+            });
+            
+            const filteredRows = paddedRows.filter((r) => r.some((c) => String(c).trim().length > 0));
+            return rowsToObjects(filteredRows);
+        }
+
+        function rowsToObjects([header, ...rows]) {
+            const seen = new Set();
+            const hdr = (header || []).map((h, idx) => {
+                const base = String(h ?? "").replace(/^\ufeff/, "").trim() || `col_${idx}`;
+                let key = base;
+                let suffix = 1;
+                while (seen.has(key)) key = `${base}_${suffix++}`;
+                seen.add(key);
+                return key;
+            });
+            
+            return (rows || []).map((r) => {
+                const paddedRow = [...r];
+                while (paddedRow.length < hdr.length) {
+                    paddedRow.push("");
+                }
+                
+                return Object.fromEntries(hdr.map((h, i) => [
+                    h, 
+                    (paddedRow && paddedRow[i] != null ? String(paddedRow[i]) : "").trim()
+                ]));
+            });
+        }
+
+        function findColumn(row, possibleNames) {
+            const normalizeKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+            const keyMap = new Map();
+            for (const k of Object.keys(row)) {
+                keyMap.set(normalizeKey(k), k);
+            }
+            
+            for (const name of possibleNames) {
+                const norm = normalizeKey(name);
+                const orig = keyMap.get(norm);
+                if (orig && row[orig] !== undefined && row[orig] !== '') return row[orig];
+            }
+            return '';
+        }
+    </script>
+</body>
+</html>

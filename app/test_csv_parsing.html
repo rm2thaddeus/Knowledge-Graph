@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Parsing Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .result { background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; }
+        .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>CSV Parsing Test</h1>
+    
+    <div class="test-section">
+        <h2>Test CSV Parsing</h2>
+        <p>This page tests the CSV parsing logic with your actual data format.</p>
+        
+        <button onclick="testCSVParsing()">Test CSV Parsing</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // Copy of the CSV parsing logic from dataLoader.ts
+        function csvToRows(text) {
+            const input = String(text || "").replace(/^\ufeff/, "").trim();
+            const lines = input.split(/\r?\n/);
+
+            function splitLine(line, delimiter) {
+                const parts = [];
+                let cur = "";
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') {
+                        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
+                        inQuotes = !inQuotes; continue;
+                    }
+                    if (ch === delimiter && !inQuotes) {
+                        parts.push(cur);
+                        cur = "";
+                    } else {
+                        cur += ch;
+                    }
+                }
+                parts.push(cur);
+                return parts.map((v) => String(v).replace(/^\"|\"$/g, "").trim());
+            }
+
+            const candidates = [",", ";", "\t"];
+            const headerLine = lines[0] || "";
+            let bestDelim = ",";
+            let bestCount = 1;
+            for (const d of candidates) {
+                const parts = splitLine(headerLine, d);
+                if (parts.length > bestCount) {
+                    bestCount = parts.length;
+                    bestDelim = d;
+                }
+            }
+
+            const rows = lines.map((line) => splitLine(line, bestDelim));
+            
+            // Find the maximum number of columns from all rows
+            const maxColumns = Math.max(...rows.map(row => row.length));
+            
+            // Pad rows with empty strings to ensure consistent column count
+            const paddedRows = rows.map(row => {
+                while (row.length < maxColumns) {
+                    row.push("");
+                }
+                return row;
+            });
+            
+            return paddedRows.filter((r) => r.some((c) => String(c).trim().length > 0));
+        }
+
+        function rowsToObjects([header, ...rows]) {
+            const seen = new Set();
+            const hdr = (header || []).map((h, idx) => {
+                const base = String(h ?? "").replace(/^\ufeff/, "").trim() || `col_${idx}`;
+                let key = base;
+                let suffix = 1;
+                while (seen.has(key)) key = `${base}_${suffix++}`;
+                seen.add(key);
+                return key;
+            });
+            
+            return (rows || []).map((r) => {
+                const paddedRow = [...r];
+                while (paddedRow.length < hdr.length) {
+                    paddedRow.push("");
+                }
+                
+                return Object.fromEntries(hdr.map((h, i) => [
+                    h, 
+                    (paddedRow && paddedRow[i] != null ? String(paddedRow[i]) : "").trim()
+                ]));
+            });
+        }
+
+        function parseCSVContent(csvContent) {
+            const rows = csvToRows(csvContent);
+            return rowsToObjects(rows);
+        }
+
+        function testCSVParsing() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h3>Testing CSV Parsing...</h3>';
+
+            // Test with your actual CSV data
+            const testCSV = `id, name, node_type, source, source_type, confidence, provenance
+Person1, "Aitor Patiño Diaz", Person, ATS_and_Human.pdf, cv, High, "Aitor Patiño Diaz Phone: +33 7 82 16 22 64 Email: aitorpatinodiaz@gmail.com LinkedIn: linkedin.com/in/aitorp/"
+Person2, "Martin Hanczyc", Person, ATS_and_Human.pdf, cv, High, "Martin Hanczyc's Lab, UNITN (Trento), Italy"
+Person3, "Francesco Ricci", Person, ATS_and_Human.pdf, cv, High, "Francesco Ricci's Lab, UNITOV (Rome), Italy"`;
+
+            try {
+                const parsed = parseCSVContent(testCSV);
+                
+                let html = '<div class="success">✅ CSV parsing successful!</div>';
+                html += '<div class="result"><strong>Parsed data:</strong><br>';
+                html += '<pre>' + JSON.stringify(parsed, null, 2) + '</pre></div>';
+                
+                // Test column detection
+                const headers = parsed.length ? Object.keys(parsed[0]) : [];
+                const normalize = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+                const normHeaders = new Set(headers.map(normalize));
+                
+                const hasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normHeaders.has(k));
+                const hasEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+                
+                html += '<div class="result"><strong>Column detection:</strong><br>';
+                html += `Headers: ${headers.join(', ')}<br>`;
+                html += `Has node fields: ${hasNodeFields}<br>`;
+                html += `Has edge fields: ${hasEdgeFields}<br>`;
+                html += `File type: ${hasNodeFields && !hasEdgeFields ? 'NODE' : hasEdgeFields ? 'EDGE' : 'UNKNOWN'}</div>`;
+                
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                console.error('CSV parsing error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

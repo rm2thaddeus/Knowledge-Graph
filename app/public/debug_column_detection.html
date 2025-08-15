@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Column Detection Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .result { background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; }
+        .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Column Detection Debug</h1>
+    
+    <div class="test-section">
+        <h2>Test Column Detection Logic</h2>
+        <p>This page tests the exact column detection logic used in your application.</p>
+        
+        <button onclick="testColumnDetection()">Test Column Detection</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function testColumnDetection() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h3>Testing Column Detection...</h3>';
+
+            // Test with your actual CSV headers
+            const testHeaders = [
+                'source_id', 'target_id', 'relation', 'source', 'source_type', 'confidence', 'provenance'
+            ];
+
+            const normalize = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+            const normHeaders = new Set(testHeaders.map(normalize));
+            
+            const hasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normHeaders.has(k));
+            const hasEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+            
+            const detectedNodeFields = ['id','name','label','type','nodetype','category'].filter(k => normHeaders.has(k));
+            const detectedEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].filter(k => normHeaders.has(k));
+            
+            let html = '<div class="result"><strong>Test Headers:</strong><br>';
+            html += `Original: ${testHeaders.join(', ')}<br>`;
+            html += `Normalized: ${Array.from(normHeaders).join(', ')}</div>`;
+            
+            html += '<div class="result"><strong>Detection Results:</strong><br>';
+            html += `Has node fields: ${hasNodeFields}<br>`;
+            html += `Has edge fields: ${hasEdgeFields}<br>`;
+            html += `Detected node fields: [${detectedNodeFields.join(', ')}]<br>`;
+            html += `Detected edge fields: [${detectedEdgeFields.join(', ')}]</div>`;
+            
+            // Test specific patterns
+            const hasSourceTargetPattern = ['source_id','target_id','sourceid','targetid'].some(k => normHeaders.has(k));
+            html += '<div class="result"><strong>Pattern Detection:</strong><br>';
+            html += `Has source_id/target_id pattern: ${hasSourceTargetPattern}<br>`;
+            html += `source_id found: ${normHeaders.has('source_id')}<br>`;
+            html += `target_id found: ${normHeaders.has('target_id')}<br>`;
+            html += `relation found: ${normHeaders.has('relation')}</div>';
+            
+            // Test the actual logic
+            const isEdgeFile = true; // Simulate edges_ filename
+            const isNodeFile = false;
+            
+            let fileType = 'UNKNOWN';
+            if (isNodeFile && !isEdgeFile) {
+                fileType = 'NODE (filename pattern priority)';
+            } else if (isEdgeFile && !isNodeFile) {
+                fileType = 'EDGE (filename pattern priority)';
+            } else if (hasNodeFields && !hasEdgeFields) {
+                fileType = 'NODE (has node fields)';
+            } else if (hasEdgeFields || (isEdgeFile && !isNodeFile)) {
+                if (hasEdgeFields || hasSourceTargetPattern) {
+                    fileType = 'EDGE (has edge fields or source_id/target_id pattern)';
+                } else {
+                    fileType = 'NODE (no clear edge pattern)';
+                }
+            } else if (isNodeFile) {
+                fileType = 'NODE (final fallback)';
+            } else if (isEdgeFile) {
+                fileType = 'EDGE (final fallback)';
+            }
+            
+            html += '<div class="result"><strong>Logic Result:</strong><br>';
+            html += `File type: ${fileType}</div>';
+            
+            if (fileType.includes('EDGE')) {
+                html += '<div class="success">✅ Edge detection working correctly!</div>';
+            } else {
+                html += '<div class="error">❌ Edge detection failed!</div>';
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

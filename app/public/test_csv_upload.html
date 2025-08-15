@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Upload Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .download-btn { 
+            background: #007bff; color: white; padding: 10px 20px; 
+            border: none; border-radius: 4px; cursor: pointer; margin: 5px;
+        }
+        .download-btn:hover { background: #0056b3; }
+        .note { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>CSV Upload Test Files</h1>
+    
+    <div class="note">
+        <strong>Note:</strong> These are test CSV files that match your knowledge graph format. 
+        Download them and use the "Load CSV Data" button in your app to test the upload functionality.
+    </div>
+
+    <div class="test-section">
+        <h2>Test Node Files</h2>
+        <p>These files contain node data with columns: id, name, node_type, source, source_type, confidence, provenance</p>
+        
+        <h3>Sample Person Nodes</h3>
+        <button class="download-btn" onclick="downloadCSV('test_nodes_person.csv', personData)">
+            Download test_nodes_person.csv
+        </button>
+        
+        <h3>Sample Company Nodes</h3>
+        <button class="download-btn" onclick="downloadCSV('test_nodes_company.csv', companyData)">
+            Download test_nodes_company.csv
+        </button>
+        
+        <h3>Sample Role Nodes</h3>
+        <button class="download-btn" onclick="downloadCSV('test_nodes_role.csv', roleData)">
+            Download test_nodes_role.csv
+        </button>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Edge Files</h2>
+        <p>These files contain edge data with columns: source_id, target_id, relation, source, source_type, confidence, provenance</p>
+        
+        <h3>Sample Person-Role Edges</h3>
+        <button class="download-btn" onclick="downloadCSV('test_edges_person_role.csv', personRoleEdges)">
+            Download test_edges_person_role.csv
+        </button>
+        
+        <h3>Sample Person-Company Edges</h3>
+        <button class="download-btn" onclick="downloadCSV('test_edges_person_company.csv', personCompanyEdges)">
+            Download test_edges_person_company.csv
+        </button>
+    </div>
+
+    <div class="test-section">
+        <h2>Testing Instructions</h2>
+        <ol>
+            <li>Download the test CSV files above</li>
+            <li>Open your knowledge graph application</li>
+            <li>Click "Load CSV Data" and select the downloaded files</li>
+            <li>Or click "Load Folder" and select a folder containing the CSV files</li>
+            <li>Check the browser console for detailed processing logs</li>
+        </ol>
+        
+        <h3>Expected Results</h3>
+        <ul>
+            <li>3 Person nodes (Aitor, Martin, Francesco)</li>
+            <li>2 Company nodes (Merck, UNITN)</li>
+            <li>3 Role nodes (Consultant, Researcher, Professor)</li>
+            <li>3 Person-Role connections</li>
+            <li>2 Person-Company connections</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test data that matches your CSV format
+        const personData = `id,name,node_type,source,source_type,confidence,provenance
+Person1,"Aitor Patiño Diaz",Person,test_data.pdf,cv,High,"Test person data"
+Person2,"Martin Hanczyc",Person,test_data.pdf,cv,High,"Test person data"
+Person3,"Francesco Ricci",Person,test_data.pdf,cv,High,"Test person data"`;
+
+        const companyData = `id,name,node_type,source,source_type,confidence,provenance
+Company1,"Merck Life Science",Company,test_data.pdf,cv,High,"Test company data"
+Company2,"University of Trento (UNITN)",Company,test_data.pdf,cv,High,"Test company data"`;
+
+        const roleData = `id,name,node_type,source,source_type,confidence,provenance
+Role1,"Business Intelligence Consultant",Role,test_data.pdf,cv,High,"Test role data"
+Role2,"Postdoctoral Researcher",Role,test_data.pdf,cv,High,"Test role data"
+Role3,"Professor",Role,test_data.pdf,cv,High,"Test role data"`;
+
+        const personRoleEdges = `source_id,target_id,relation,source,source_type,confidence,provenance
+Person1,Role1,holds_role,test_data.pdf,cv,High,"Test edge data"
+Person2,Role2,holds_role,test_data.pdf,cv,High,"Test edge data"
+Person3,Role3,holds_role,test_data.pdf,cv,High,"Test edge data"`;
+
+        const personCompanyEdges = `source_id,target_id,relation,source,source_type,confidence,provenance
+Person1,Company1,works_at,test_data.pdf,cv,High,"Test edge data"
+Person2,Company2,works_at,test_data.pdf,cv,High,"Test edge data"`;
+
+        function downloadCSV(filename, content) {
+            const blob = new Blob([content], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { 
   Sparkles, Play, Pause, FileText, X, Search, 
-  Download, Info, ZoomIn, ZoomOut, RotateCcw
+  Download, Info, ZoomIn, ZoomOut, RotateCcw, FolderOpen
 } from "lucide-react";
 import { buildGraphFromCSV, parseCSVContent } from '../utils/dataLoader';
 import type { GraphData, GraphNode, GraphLink } from '../utils/dataLoader';
@@ -522,6 +522,13 @@ export default function KnowledgeGraph() {
   const [zoomInCounter, setZoomInCounter] = useState(0);
   const [zoomOutCounter, setZoomOutCounter] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const dirInputRef = useRef<HTMLInputElement | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
+
+  // Add debug logging
+  const addDebugLog = (message: string) => {
+    setDebugInfo(prev => [...prev.slice(-9), `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
 
 
   // Observe size of middle pane for canvas dims
@@ -542,6 +549,20 @@ export default function KnowledgeGraph() {
       setResetCounter(c => c + 1);
     }, 500); // Wait for physics to settle a bit
     return () => clearTimeout(timer);
+  }, []);
+
+  // Ensure the folder input supports directory selection across browsers
+  useEffect(() => {
+    if (dirInputRef.current) {
+      try {
+        dirInputRef.current.setAttribute('webkitdirectory', '');
+        dirInputRef.current.setAttribute('directory', '');
+        dirInputRef.current.setAttribute('mozdirectory', '');
+        dirInputRef.current.setAttribute('nwdirectory', '');
+      } catch (_) {
+        // noop
+      }
+    }
   }, []);
 
   // Build degree map
@@ -625,24 +646,34 @@ export default function KnowledgeGraph() {
 
 
 
-  // File upload handling
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    console.log("🚀 Starting file upload process...");
+  // Shared processor for both file and folder uploads
+  const processSelectedFiles = async (files: FileList) => {
+    console.log("🚀 Starting file processing...");
+    addDebugLog("🚀 Starting file processing...");
     console.log("📁 Files selected:", files.length);
-    
+    addDebugLog(`📁 Files selected: ${files.length}`);
     setIsUploading(true);
-    
+
     try {
-      console.log(`Processing ${files.length} CSV files...`);
+      // Only keep CSV files
+      const csvFiles: File[] = [];
+      for (const f of files as any) {
+        if (f && typeof f.name === 'string' && f.name.toLowerCase().endsWith('.csv')) csvFiles.push(f as File);
+      }
+      if (csvFiles.length === 0) {
+        addDebugLog("❌ No CSV files found");
+        alert('No CSV files found. Please select CSV files or a folder containing CSVs.');
+        return;
+      }
+
+      addDebugLog(`Processing ${csvFiles.length} CSV files...`);
+      console.log(`Processing ${csvFiles.length} CSV files...`);
       const fileContents: Record<string, string> = {};
-      
-      for (const file of files) {
+      for (const file of csvFiles) {
+        addDebugLog(`📖 Reading: ${file.name}`);
         console.log(`📖 Reading file: ${file.name} (${file.size} bytes)`);
         const content = await file.text();
-        console.log(`📄 File content preview:`, content.substring(0, 200) + "...");
+        console.log(`📄 File content preview:`, content.substring(0, 200) + '...');
         fileContents[file.name] = content;
       }
 
@@ -651,87 +682,163 @@ export default function KnowledgeGraph() {
       const allLinks: Record<string, string>[] = [];
 
       Object.entries(fileContents).forEach(([filename, content]) => {
+        addDebugLog(`🔍 Processing: ${filename}`);
         console.log(`🔍 Processing file: ${filename}`);
-        console.log(`   Content length: ${content.length} characters`);
-        console.log(`   Lines: ${content.split('\n').length}`);
-        
-        // Parse CSV content using robust parser (handles commas/semicolons/tabs and quotes)
         const data = parseCSVContent(content);
-        console.log(`   Parsed ${data.length} rows`);
         const headers = data.length ? Object.keys(data[0]) : [];
-        console.log(`   Headers found:`, headers);
-
-        console.log(`📋 File: ${filename}`);
-        console.log(`   Headers: [${headers.join(', ')}]`);
-        console.log(`   Data rows: ${data.length}`);
-        console.log(`   Sample row:`, data[0] || 'No data');
-
-        // Auto-detect if this is a nodes or edges file based on content (case/format insensitive)
         const normalize = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
         const normHeaders = new Set(headers.map(normalize));
+        
+        console.log(`   Headers found:`, headers);
+        console.log(`   Normalized headers:`, Array.from(normHeaders));
+        
+        // Enhanced detection for your CSV naming convention
         const hasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normHeaders.has(k));
-        const hasEdgeFields = ['source','sourceid','from','target','targetid','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+        const hasEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+        
+        // Use filename patterns as fallback for better detection
+        const isNodeFile = filename.toLowerCase().includes('node') || filename.toLowerCase().startsWith('nodes_');
+        const isEdgeFile = filename.toLowerCase().includes('edge') || filename.toLowerCase().includes('link') || filename.toLowerCase().startsWith('edges_');
 
-        console.log(`   Has node fields: ${hasNodeFields} (${headers.filter(h => ['id', 'ID', 'name', 'Name', 'label', 'Label', 'node_type', 'type', 'Type'].includes(h)).join(', ')})`);
-        console.log(`   Has edge fields: ${hasEdgeFields} (${headers.filter(h => ['source', 'Source', 'source_id', 'Source_ID', 'target', 'Target', 'target_id', 'Target_ID', 'relation', 'Relation'].includes(h)).join(', ')})`);
+        console.log(`   Headers found:`, headers);
+        console.log(`   Normalized headers:`, Array.from(normHeaders));
+        console.log(`   Has node fields: ${hasNodeFields}`);
+        console.log(`   Has edge fields: ${hasEdgeFields}`);
+        console.log(`   Is node file (pattern): ${isNodeFile}`);
+        console.log(`   Is edge file (pattern): ${isEdgeFile}`);
+        
+        // Debug: show which specific columns are being detected
+        const detectedNodeFields = ['id','name','label','type','nodetype','category'].filter(k => normHeaders.has(k));
+        const detectedEdgeFields = ['source','sourceid','source_id','from','target','targetid','target_id','to','relation','relationship','predicate'].filter(k => normHeaders.has(k));
+        console.log(`   Detected node fields:`, detectedNodeFields);
+        console.log(`   Detected edge fields:`, detectedEdgeFields);
 
-        if (hasNodeFields && !hasEdgeFields) {
-          // This looks like a nodes file
+        // Priority-based detection: filename patterns take precedence when there's ambiguity
+        if (isNodeFile && !isEdgeFile) {
+          // If filename clearly indicates it's a node file, treat it as such
+          addDebugLog(`📋 ${filename}: Detected as NODE file (filename pattern priority)`);
+          console.log(`   📋 Detected as NODE file (filename pattern priority)`);
           allNodes.push(...data);
-          console.log(`✅ Detected nodes file: ${filename} with ${data.length} nodes`);
-        } else if (hasEdgeFields) {
-          // This looks like an edges file
+        } else if (isEdgeFile && !isNodeFile) {
+          // If filename clearly indicates it's an edge file, treat it as such
+          addDebugLog(`🔗 ${filename}: Detected as EDGE file (filename pattern priority)`);
+          console.log(`   🔗 Detected as EDGE file (filename pattern priority)`);
           allLinks.push(...data);
-          console.log(`🔗 Detected edges file: ${filename} with ${data.length} links`);
-        } else if (filename.toLowerCase().includes('node')) {
-          // Fallback: filename suggests nodes
+        } else if (hasNodeFields && !hasEdgeFields) {
+          // Fall back to column-based detection when filename is ambiguous
+          addDebugLog(`📋 ${filename}: Detected as NODE file (has node fields)`);
+          console.log(`   📋 Detected as NODE file (has node fields)`);
           allNodes.push(...data);
-          console.log(`📝 Fallback: treating ${filename} as nodes file with ${data.length} nodes`);
-        } else if (filename.toLowerCase().includes('edge') || filename.toLowerCase().includes('link')) {
-          // Fallback: filename suggests edges
-          allLinks.push(...data);
-          console.log(`🔗 Fallback: treating ${filename} as edges file with ${data.length} links`);
-        } else {
-          // Last resort: try to guess based on content structure
-          if (data.length > 0 && Object.keys(data[0]).length >= 3) {
-            // If it has enough columns, assume it's nodes
-            allNodes.push(...data);
-            console.log(`🤔 Auto-detected ${filename} as nodes file with ${data.length} nodes`);
+        } else if (hasEdgeFields || (isEdgeFile && !isNodeFile)) {
+          // Enhanced edge detection: also check for source_id/target_id pattern
+          const hasSourceTargetPattern = ['source_id','target_id','sourceid','targetid'].some(k => normHeaders.has(k));
+          if (hasEdgeFields || hasSourceTargetPattern) {
+            addDebugLog(`🔗 ${filename}: Detected as EDGE file (has edge fields or source_id/target_id pattern)`);
+            console.log(`   🔗 Detected as EDGE file (has edge fields or source_id/target_id pattern)`);
+            allLinks.push(...data);
           } else {
-            console.warn(`⚠️ Could not determine file type for ${filename}, skipping`);
+            addDebugLog(`📋 ${filename}: Fallback as NODE file (no clear edge pattern)`);
+            console.log(`   📋 Fallback: treating as NODE file (no clear edge pattern)`);
+            allNodes.push(...data);
+          }
+        } else if (isNodeFile) {
+          // Final fallback for node files
+          addDebugLog(`📋 ${filename}: Detected as NODE file (final fallback)`);
+          console.log(`   📋 Detected as NODE file (final fallback)`);
+          allNodes.push(...data);
+        } else if (isEdgeFile) {
+          // Final fallback for edge files
+          addDebugLog(`🔗 ${filename}: Detected as EDGE file (final fallback)`);
+          console.log(`   🔗 Detected as EDGE file (final fallback)`);
+          allLinks.push(...data);
+        } else {
+          // Last resort: if file has 3+ columns and no clear pattern, treat as nodes
+          if (data.length > 0 && Object.keys(data[0]).length >= 3) {
+            addDebugLog(`📋 ${filename}: Fallback as NODE file (3+ columns)`);
+            console.log(`   📋 Fallback: treating as NODE file (3+ columns)`);
+            allNodes.push(...data);
           }
         }
       });
 
-      console.log(`📊 Total collected: ${allNodes.length} nodes, ${allLinks.length} links`);
-      console.log(`📋 All nodes:`, allNodes);
-      console.log(`🔗 All links:`, allLinks);
+      // Add summary logging
+      addDebugLog(`📊 Processing complete: ${allNodes.length} node records, ${allLinks.length} edge records`);
+      console.log(`📊 Processing complete: ${allNodes.length} node records, ${allLinks.length} edge records`);
       
+      // Debug: show sample data
+      if (allNodes.length > 0) {
+        console.log(`📋 Sample node data:`, allNodes[0]);
+        addDebugLog(`📋 Sample node: ${JSON.stringify(allNodes[0]).substring(0, 100)}...`);
+      }
+      if (allLinks.length > 0) {
+        console.log(`🔗 Sample edge data:`, allLinks[0]);
+        addDebugLog(`🔗 Sample edge: ${JSON.stringify(allLinks[0]).substring(0, 100)}...`);
+      }
+
       if (allNodes.length === 0) {
+        addDebugLog("❌ No nodes found in CSV files");
         alert("❌ No nodes found in CSV files. Please check that your CSV files contain node data with columns like 'id', 'name', 'type', etc.");
         return;
       }
 
-      console.log("🔧 Calling buildGraphFromCSV...");
+      if (allLinks.length === 0) {
+        addDebugLog("⚠️ No edge/link files found");
+        console.log("⚠️ No edge/link files found. This will create a graph with only nodes (no connections).");
+      }
+
+      addDebugLog(`📊 Found ${allNodes.length} nodes, ${allLinks.length} edges`);
+      console.log(`📊 Summary: Found ${allNodes.length} node records and ${allLinks.length} edge records`);
+      
+      // Validate that we have at least some valid data
+      if (allNodes.length === 0 && allLinks.length === 0) {
+        addDebugLog("❌ No valid data found");
+        alert("❌ No valid data found in CSV files. Please check your file format and content.");
+        return;
+      }
+
+      addDebugLog("🏗️ Building graph from CSV data...");
       const newGraph = buildGraphFromCSV(allNodes, allLinks);
-      console.log("🎯 New graph created:", newGraph);
+      
+      // Additional validation
+      if (newGraph.nodes.length === 0) {
+        addDebugLog("❌ Failed to parse any valid nodes");
+        alert("❌ Failed to parse any valid nodes from CSV files. Please check your data format.");
+        return;
+      }
+      
+      addDebugLog(`✅ Successfully built graph with ${newGraph.nodes.length} nodes and ${newGraph.links.length} links`);
       setGraph(newGraph);
+      setTimeout(() => setResetCounter(c => c + 1), 100);
       
-      // Reset view to show the new data
-      setTimeout(() => {
-        setResetCounter(c => c + 1);
-      }, 100);
+      const successMessage = allLinks.length > 0 
+        ? `🎉 Successfully loaded ${newGraph.nodes.length} nodes and ${newGraph.links.length} links!`
+        : `🎉 Successfully loaded ${newGraph.nodes.length} nodes! (No connections found - you may need to upload edge files)`;
       
-      alert(`🎉 Successfully loaded ${newGraph.nodes.length} nodes and ${newGraph.links.length} links!\n\nYour knowledge graph is now ready for analysis.`);
+      alert(successMessage);
     } catch (error) {
-      console.error("❌ Error parsing CSV files:", error);
-      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-      alert(`❌ Error parsing CSV files: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addDebugLog(`❌ Error: ${errorMsg}`);
+      console.error('❌ Error parsing CSV files:', error);
+      alert(`❌ Error parsing CSV files: ${errorMsg}`);
     } finally {
       setIsUploading(false);
-      // Reset the file input so the same file can be selected again
-      event.target.value = '';
     }
+  };
+
+  // File upload handling (manual multi-file selection)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    await processSelectedFiles(files);
+    event.target.value = '';
+  };
+
+  // Folder upload handling (directory picker)
+  const handleDirectoryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    await processSelectedFiles(files);
+    event.target.value = '';
   };
 
   // Canvas drawing helpers
@@ -908,12 +1015,12 @@ export default function KnowledgeGraph() {
             </div>
           </div>
         )}
-        <div className="mx-auto max-w-[1600px] px-4 py-2 flex items-center gap-3">
+        <div className="mx-auto max-w-[1600px] px-4 py-2 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 pr-2">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <div className="font-semibold tracking-wide">Graph Explorer</div>
           </div>
-          <div className="flex-1 max-w-xl relative">
+          <div className="flex-1 min-w-[280px] max-w-xl relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input
               value={query}
@@ -951,6 +1058,23 @@ export default function KnowledgeGraph() {
                 disabled={isUploading}
               />
             </label>
+            <label className={`cursor-pointer rounded-lg px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors shadow-lg ${
+              isUploading 
+                ? 'bg-indigo-600 cursor-not-allowed' 
+                : 'bg-indigo-600 hover:bg-indigo-500 hover:shadow-xl'
+            }`}>
+              <FolderOpen className="w-5 h-5" />
+              <span className="text-white font-semibold">{isUploading ? 'Processing...' : 'Load Folder'}</span>
+              <input
+                ref={dirInputRef}
+                type="file"
+                multiple
+                accept=".csv"
+                onChange={handleDirectoryUpload}
+                className="hidden"
+                disabled={isUploading}
+              />
+            </label>
             <div className="hidden lg:block text-xs text-slate-400 ml-2 max-w-xs">
               CSV files should contain columns like: id, name, type for nodes; source, target, relation for links
             </div>
@@ -974,7 +1098,7 @@ export default function KnowledgeGraph() {
       </div>
 
       {/* Graph viewport */}
-      <div className={`pt-12 w-full h-full ${graph === starterData ? 'pt-20' : 'pt-12'}`} ref={containerRef}>
+      <div className={`${graph === starterData ? 'pt-24' : 'pt-16'} w-full h-full`} ref={containerRef}>
         <div className="relative w-full h-[calc(100vh-48px)]">
           <CanvasForceGraph {...canvasProps} />
 
@@ -995,6 +1119,24 @@ export default function KnowledgeGraph() {
           <div className="absolute left-4 bottom-4 z-20 bg-neutral-900/80 border border-neutral-700 backdrop-blur rounded-xl p-2">
             <Minimap width={160} height={120} nodes={frameNodes} />
           </div>
+
+          {/* Debug Panel */}
+          {debugInfo.length > 0 && (
+            <div className="absolute left-4 top-20 z-20 bg-neutral-900/90 border border-neutral-700 backdrop-blur rounded-xl p-3 max-w-md max-h-64 overflow-y-auto">
+              <div className="text-xs font-semibold text-slate-300 mb-2">CSV Processing Log</div>
+              <div className="space-y-1">
+                {debugInfo.map((log, i) => (
+                  <div key={i} className="text-xs text-slate-400 font-mono">{log}</div>
+                ))}
+              </div>
+              <button 
+                onClick={() => setDebugInfo([])} 
+                className="text-xs text-slate-500 hover:text-slate-300 mt-2"
+              >
+                Clear Log
+              </button>
+            </div>
+          )}
 
           {/* Hover tooltip */}
           {hoverNode && (

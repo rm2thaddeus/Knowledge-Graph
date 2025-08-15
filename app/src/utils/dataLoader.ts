@@ -69,8 +69,20 @@ function csvToRows(text: string): string[][] {
   }
 
   const rows = lines.map((line) => splitLine(line, bestDelim));
+  
+  // Find the maximum number of columns from all rows
+  const maxColumns = Math.max(...rows.map(row => row.length));
+  
+  // Pad rows with empty strings to ensure consistent column count
+  const paddedRows = rows.map(row => {
+    while (row.length < maxColumns) {
+      row.push("");
+    }
+    return row;
+  });
+  
   // Drop empty lines (all cells empty)
-  return rows.filter((r) => r.some((c) => String(c).trim().length > 0));
+  return paddedRows.filter((r) => r.some((c) => String(c).trim().length > 0));
 }
 
 function rowsToObjects([header, ...rows]: string[][]): Record<string, string>[] {
@@ -83,9 +95,19 @@ function rowsToObjects([header, ...rows]: string[][]): Record<string, string>[] 
     seen.add(key);
     return key;
   });
-  return (rows || []).map((r) =>
-    Object.fromEntries(hdr.map((h, i) => [h, (r && r[i] != null ? String(r[i]) : "").trim()]))
-  );
+  
+  return (rows || []).map((r) => {
+    // Ensure the row has the same number of columns as the header
+    const paddedRow = [...r];
+    while (paddedRow.length < hdr.length) {
+      paddedRow.push("");
+    }
+    
+    return Object.fromEntries(hdr.map((h, i) => [
+      h, 
+      (paddedRow && paddedRow[i] != null ? String(paddedRow[i]) : "").trim()
+    ]));
+  });
 }
 
 // Load and parse CSV data
@@ -211,6 +233,7 @@ export function buildGraphFromCSV(
     }
     return map;
   };
+  
   // Helper function to find the best matching column (by synonyms and normalized key)
   const findColumn = (row: Record<string, string>, possibleNames: string[]): string => {
     const keyMap = getKeyMap(row);
@@ -234,7 +257,7 @@ export function buildGraphFromCSV(
     const label = findColumn(row, ['label', 'name', 'title', 'display', 'display_name']) || id;
     console.log(`     Label found: "${label}"`);
     
-    // Try to find the best type field - handle both 'type' and 'node_type'
+    // Try to find the best type field - handle both 'type' and 'node_type' (your CSV uses node_type)
     const type = findColumn(row, ['type', 'node_type', 'category', 'class', 'kind']) || 'Unknown';
     console.log(`     Type found: "${type}"`);
     
@@ -283,7 +306,7 @@ export function buildGraphFromCSV(
   const links: GraphLink[] = linksCSV.map((row, index) => {
     console.log(`   Processing link row ${index}:`, row);
     
-    // Try to find source and target - handle both 'source'/'target' and 'source_id'/'target_id'
+    // Try to find source and target - handle both 'source'/'target' and 'source_id'/'target_id' (your CSV uses source_id/target_id)
     const source = findColumn(row, ['source', 'source_id', 'sourceid', 'from', 'start', 'src', 'head', 'subject', 's']);
     const target = findColumn(row, ['target', 'target_id', 'targetid', 'to', 'end', 'dst', 'tail', 'object', 'o']);
     
@@ -318,6 +341,17 @@ export function buildGraphFromCSV(
   // Filter out invalid links (missing source or target)
   const validLinks = links.filter(link => link.source && link.target);
   console.log(`🔗 Valid links: ${validLinks.length}/${links.length}`);
+  
+  // Show some sample valid links
+  if (validLinks.length > 0) {
+    console.log(`🔗 Sample valid links:`, validLinks.slice(0, 3));
+  }
+  
+  // Show some invalid links if any
+  const invalidLinks = links.filter(link => !link.source || !link.target);
+  if (invalidLinks.length > 0) {
+    console.log(`❌ Invalid links (missing source/target):`, invalidLinks.slice(0, 3));
+  }
   
   // Filter out invalid nodes (missing id or type)
   const validNodes = nodes.filter(node => node.id && node.type);
