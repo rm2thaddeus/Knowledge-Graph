@@ -29,30 +29,61 @@ export interface GraphData {
 
 // CSV parsing utilities
 function csvToRows(text: string): string[][] {
-  return String(text || "")
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => {
-      const parts: string[] = [];
-      let cur = "";
-      let inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') inQ = !inQ;
-        else if (ch === "," && !inQ) { 
-          parts.push(cur); 
-          cur = ""; 
-        }
-        else cur += ch;
+  const input = String(text || "").replace(/^\ufeff/, "").trim(); // strip BOM if present
+  const lines = input.split(/\r?\n/);
+
+  // Helper: split a single line by delimiter, respecting quotes
+  const splitLine = (line: string, delimiter: string): string[] => {
+    const parts: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        // Handle escaped double quotes within quoted field
+        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
+        inQuotes = !inQuotes; continue;
       }
-      parts.push(cur);
-      return parts.map((v) => String(v).replace(/^"|"$/g, "").trim());
-    });
+      if (ch === delimiter && !inQuotes) {
+        parts.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    parts.push(cur);
+    return parts.map((v) => String(v).replace(/^\"|\"$/g, "").trim());
+  };
+
+  // Detect delimiter from header line by choosing the candidate that yields the most columns
+  const candidates = [",", ";", "\t"];
+  const headerLine = lines[0] || "";
+  let bestDelim = ",";
+  let bestCount = 1;
+  for (const d of candidates) {
+    const parts = splitLine(headerLine, d);
+    if (parts.length > bestCount) {
+      bestCount = parts.length;
+      bestDelim = d;
+    }
+  }
+
+  const rows = lines.map((line) => splitLine(line, bestDelim));
+  // Drop empty lines (all cells empty)
+  return rows.filter((r) => r.some((c) => String(c).trim().length > 0));
 }
 
 function rowsToObjects([header, ...rows]: string[][]): Record<string, string>[] {
-  const hdr = (header || []).map((h) => String(h).trim());
-  return (rows || []).map((r) => 
+  const seen = new Set<string>();
+  const hdr = (header || []).map((h, idx) => {
+    const base = String(h ?? "").replace(/^\ufeff/, "").trim() || `col_${idx}`;
+    let key = base;
+    let suffix = 1;
+    while (seen.has(key)) key = `${base}_${suffix++}`;
+    seen.add(key);
+    return key;
+  });
+  return (rows || []).map((r) =>
     Object.fromEntries(hdr.map((h, i) => [h, (r && r[i] != null ? String(r[i]) : "").trim()]))
   );
 }
@@ -164,27 +195,155 @@ export function buildGraphFromCSV(
   nodesCSV: Record<string, string>[],
   linksCSV: Record<string, string>[]
 ): GraphData {
-  const nodes: GraphNode[] = nodesCSV.map((row) => ({
-    id: row.id || row.ID,
-    label: row.name || row.label || row.Name || row.Label || row.id || row.ID,
-    type: row.node_type || row.type || row.Type || "Unknown",
-    source: row.source,
-    source_type: row.source_type,
-    confidence: row.confidence,
-    provenance: row.provenance,
-    start: row.start || row.Start,
-    end: row.end || row.End
-  }));
+  console.log("🔧 buildGraphFromCSV called with:");
+  console.log("   nodesCSV:", nodesCSV);
+  console.log("   linksCSV:", linksCSV);
+  
+  // Normalization helpers for flexible header matching
+  const normalizeKey = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const rowKeyCache = new WeakMap<Record<string, string>, Map<string, string>>();
+  const getKeyMap = (row: Record<string, string>) => {
+    let map = rowKeyCache.get(row);
+    if (!map) {
+      map = new Map<string, string>();
+      for (const k of Object.keys(row)) map.set(normalizeKey(k), k);
+      rowKeyCache.set(row, map);
+    }
+    return map;
+  };
+  // Helper function to find the best matching column (by synonyms and normalized key)
+  const findColumn = (row: Record<string, string>, possibleNames: string[]): string => {
+    const keyMap = getKeyMap(row);
+    for (const name of possibleNames) {
+      const norm = normalizeKey(name);
+      const orig = keyMap.get(norm);
+      if (orig && row[orig] !== undefined && row[orig] !== '') return row[orig];
+    }
+    return '';
+  };
 
-  const links: GraphLink[] = linksCSV.map((row) => ({
-    source: row.source_id || row.source || row.Source,
-    target: row.target_id || row.target || row.Target,
-    relation: row.relation || row.Relation || "related_to",
-    source_file: row.source,
-    source_type: row.source_type,
-    confidence: row.confidence,
-    provenance: row.provenance
-  }));
+  console.log("🏗️ Building nodes...");
+  const nodes: GraphNode[] = nodesCSV.map((row, index) => {
+    console.log(`   Processing node row ${index}:`, row);
+    
+    // Try to find the best ID field
+    const id = findColumn(row, ['id', 'node_id', 'uid', 'key', 'identifier']) || `node_${index}`;
+    console.log(`     ID found: "${id}"`);
+    
+    // Try to find the best label/name field
+    const label = findColumn(row, ['label', 'name', 'title', 'display', 'display_name']) || id;
+    console.log(`     Label found: "${label}"`);
+    
+    // Try to find the best type field - handle both 'type' and 'node_type'
+    const type = findColumn(row, ['type', 'node_type', 'category', 'class', 'kind']) || 'Unknown';
+    console.log(`     Type found: "${type}"`);
+    
+    // Try to find confidence field
+    const confidence = findColumn(row, ['confidence', 'conf']) || 'Medium';
+    console.log(`     Confidence found: "${confidence}"`);
+    
+    // Try to find provenance field
+    const provenance = findColumn(row, ['provenance', 'source', 'origin']) || '';
+    console.log(`     Provenance found: "${provenance}"`);
+    
+    // Try to find start/end dates
+    const start = findColumn(row, ['start', 'start_date', 'from', 'since', 'begin']);
+    const end = findColumn(row, ['end', 'end_date', 'to', 'until', 'finish']);
+    
+    // Try to find traits (for Person nodes)
+    const traits = findColumn(row, ['traits', 'trait']);
+    
+    // Try to find accounts (for Person nodes)
+    const accounts = findColumn(row, ['accounts', 'account']);
+    
+    // Try to find score (for Trait nodes)
+    const score = findColumn(row, ['score', 'value']);
+    
+    // Build the node object
+    const node: GraphNode = {
+      id,
+      label,
+      type,
+      confidence,
+      provenance
+    };
+    
+    // Add optional fields if they exist
+    if (start) node.start = start;
+    if (end) node.end = end;
+    if (traits) node.traits = traits;
+    if (accounts) node.accounts = parseInt(accounts) || 0;
+    if (score) node.score = parseFloat(score) || 0;
+    
+    console.log(`     Final node:`, node);
+    return node;
+  });
 
-  return { nodes, links };
+  console.log("🔗 Building links...");
+  const links: GraphLink[] = linksCSV.map((row, index) => {
+    console.log(`   Processing link row ${index}:`, row);
+    
+    // Try to find source and target - handle both 'source'/'target' and 'source_id'/'target_id'
+    const source = findColumn(row, ['source', 'source_id', 'sourceid', 'from', 'start', 'src', 'head', 'subject', 's']);
+    const target = findColumn(row, ['target', 'target_id', 'targetid', 'to', 'end', 'dst', 'tail', 'object', 'o']);
+    
+    console.log(`     Source found: "${source}"`);
+    console.log(`     Target found: "${target}"`);
+    
+    // Try to find relation field
+    const relation = findColumn(row, ['relation', 'relationship', 'rel', 'edge', 'edge_type', 'type', 'predicate', 'label']) || 'related';
+    console.log(`     Relation found: "${relation}"`);
+    
+    // Try to find confidence field
+    const confidence = findColumn(row, ['confidence', 'conf']) || 'Medium';
+    console.log(`     Confidence found: "${confidence}"`);
+    
+    // Try to find provenance field
+    const provenance = findColumn(row, ['provenance', 'source', 'origin']) || '';
+    console.log(`     Provenance found: "${provenance}"`);
+    
+    // Build the link object
+    const link: GraphLink = {
+      source,
+      target,
+      relation,
+      confidence,
+      provenance
+    };
+    
+    console.log(`     Final link:`, link);
+    return link;
+  });
+
+  // Filter out invalid links (missing source or target)
+  const validLinks = links.filter(link => link.source && link.target);
+  console.log(`🔗 Valid links: ${validLinks.length}/${links.length}`);
+  
+  // Filter out invalid nodes (missing id or type)
+  const validNodes = nodes.filter(node => node.id && node.type);
+  console.log(`📋 Valid nodes: ${validNodes.length}/${nodes.length}`);
+
+  console.log(`✅ Processed ${validNodes.length} valid nodes and ${validLinks.length} valid links`);
+  console.log(`📊 Node types found:`, [...new Set(validNodes.map(n => n.type))]);
+  console.log(`🔗 Relation types found:`, [...new Set(validLinks.map(l => l.relation))]);
+
+  const result = {
+    nodes: validNodes,
+    links: validLinks
+  };
+  
+  console.log("🎯 Final result:", result);
+  return result;
+}
+
+// Function to load knowledge graph from multiple CSV files (for your directory structure)
+export async function loadKnowledgeGraphFromDirectory(): Promise<GraphData> {
+  try {
+    // This would be called from a file input that selects multiple CSV files
+    // For now, return empty data - the actual loading happens in the component
+    return { nodes: [], links: [] };
+  } catch (error) {
+    console.error("Error loading knowledge graph data:", error);
+    return { nodes: [], links: [] };
+  }
 }

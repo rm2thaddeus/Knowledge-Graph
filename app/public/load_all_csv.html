@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Loader Helper</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1f2937; color: white; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .file-input { margin: 20px 0; }
+        .instructions { background: #374151; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .button { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        .button:hover { background: #2563eb; }
+        .status { margin: 20px 0; padding: 15px; border-radius: 6px; }
+        .success { background: #065f46; }
+        .error { background: #991b1b; }
+        .info { background: #1e40af; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Knowledge Graph CSV Loader</h1>
+        
+        <div class="instructions">
+            <h3>How to load your knowledge graph:</h3>
+            <ol>
+                <li><strong>Select ALL your CSV files</strong> from the knowledge_graph_updated folder</li>
+                <li>Include both node files (nodes_*.csv) and edge files (edges_*.csv)</li>
+                <li>Click "Load All Files" to process them</li>
+                <li>Copy the combined data to your main app</li>
+            </ol>
+        </div>
+
+        <div class="file-input">
+            <input type="file" id="csvFiles" multiple accept=".csv" style="display: none;">
+            <button class="button" onclick="document.getElementById('csvFiles').click()">
+                📁 Select All CSV Files
+            </button>
+            <span id="fileCount" style="margin-left: 10px;"></span>
+        </div>
+
+        <button class="button" id="loadButton" onclick="loadAllFiles()" disabled>
+            Load All Files
+        </button>
+
+        <div id="status"></div>
+        
+        <div id="results" style="display: none;">
+            <h3>Combined Data:</h3>
+            <div style="background: #374151; padding: 15px; border-radius: 6px; margin: 10px 0;">
+                <strong>Total Nodes:</strong> <span id="nodeCount">0</span><br>
+                <strong>Total Links:</strong> <span id="linkCount">0</span>
+            </div>
+            <button class="button" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+        </div>
+    </div>
+
+    <script>
+        let allNodes = [];
+        let allLinks = [];
+
+        document.getElementById('csvFiles').addEventListener('change', function(e) {
+            const files = e.target.files;
+            document.getElementById('fileCount').textContent = `Selected ${files.length} files`;
+            document.getElementById('loadButton').disabled = files.length === 0;
+        });
+
+        async function loadAllFiles() {
+            const files = document.getElementById('csvFiles').files;
+            if (files.length === 0) return;
+
+            showStatus('Processing files...', 'info');
+            allNodes = [];
+            allLinks = [];
+
+            try {
+                for (const file of files) {
+                    const content = await file.text();
+                    const rows = content.split('\n').map(row => 
+                        row.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
+                    );
+                    
+                    if (rows.length < 2) continue;
+                    
+                    const headers = rows[0];
+                    const data = rows.slice(1).map(row => {
+                        const obj = {};
+                        headers.forEach((header, i) => {
+                            obj[header] = row[i] || '';
+                        });
+                        return obj;
+                    });
+
+                    // Determine if this is a nodes or edges file
+                    const hasNodeFields = headers.some(h => 
+                        ['id', 'ID', 'name', 'Name', 'label', 'Label', 'node_type', 'type', 'Type'].includes(h)
+                    );
+                    const hasEdgeFields = headers.some(h => 
+                        ['source', 'Source', 'source_id', 'target', 'Target', 'target_id', 'relation', 'Relation'].includes(h)
+                    );
+
+                    if (hasNodeFields && !hasEdgeFields) {
+                        allNodes.push(...data);
+                        console.log(`Loaded ${data.length} nodes from ${file.name}`);
+                    } else if (hasEdgeFields) {
+                        allLinks.push(...data);
+                        console.log(`Loaded ${data.length} links from ${file.name}`);
+                    }
+                }
+
+                document.getElementById('nodeCount').textContent = allNodes.length;
+                document.getElementById('linkCount').textContent = allLinks.length;
+                document.getElementById('results').style.display = 'block';
+                
+                showStatus(`Successfully loaded ${allNodes.length} nodes and ${allLinks.length} links!`, 'success');
+                
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function copyToClipboard() {
+            const data = {
+                nodes: allNodes,
+                links: allLinks
+            };
+            
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+                showStatus('Data copied to clipboard!', 'success');
+            }).catch(() => {
+                showStatus('Failed to copy to clipboard', 'error');
+            });
+        }
+    </script>
+</body>
+</html>

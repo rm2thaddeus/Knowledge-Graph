@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { motion } from "framer-motion";
 import { 
-  Filter, Sparkles, Play, Pause, FileText, X
+  Sparkles, Play, Pause, FileText, X, Search, 
+  Download, Info, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
-import { buildGraphFromCSV } from '../utils/dataLoader';
+import { buildGraphFromCSV, parseCSVContent } from '../utils/dataLoader';
 import type { GraphData, GraphNode, GraphLink } from '../utils/dataLoader';
 
 // Node type metadata - updated to match your data
@@ -30,6 +30,8 @@ const TYPE_META = {
 const NODE_TYPES = Object.keys(TYPE_META);
 
 // Enhanced starter data with more realistic content
+// NOTE: This is the default hardcoded data that shows when no CSV files are loaded
+// To load your own data, use the "Upload CSV" button in the top bar
 const starterData: GraphData = {
   nodes: [
     {
@@ -99,11 +101,45 @@ const starterData: GraphData = {
 // Utility functions
 const year = (s: string | undefined) => (s ? parseInt(String(s).slice(0, 4)) : undefined);
 
+function shortestPath(graph: GraphData, startId: string, endId: string): string[] {
+  if (startId === endId) return [startId];
+  const adj = new Map<string, string[]>();
+  (graph.links || []).forEach(({ source, target }) => {
+    const s = source;
+    const t = target;
+    if (!adj.has(s)) adj.set(s, []);
+    if (!adj.has(t)) adj.set(t, []);
+    adj.get(s)!.push(t);
+    adj.get(t)!.push(s);
+  });
+  const q = [startId];
+  const prev = new Map<string, string | null>([[startId, null]]);
+  while (q.length) {
+    const u = q.shift()!;
+    for (const v of adj.get(u) || []) {
+      if (!prev.has(v)) {
+        prev.set(v, u);
+        q.push(v);
+        if (v === endId) {
+          const path = [v];
+          let cur = v;
+          while (prev.get(cur) !== null) { 
+            cur = prev.get(cur)!; 
+            path.push(cur); 
+          }
+          return path.reverse();
+        }
+      }
+    }
+  }
+  return [];
+}
+
 
 
 // Physics simulation
 function initPositions(nodes: any[]) {
-  const spread = 220;
+  const spread = 800; // Increased from 220 to spread nodes much further apart
   nodes.forEach((n) => {
     if (typeof n.x !== "number") n.x = (Math.random() - 0.5) * spread;
     if (typeof n.y !== "number") n.y = (Math.random() - 0.5) * spread;
@@ -112,7 +148,7 @@ function initPositions(nodes: any[]) {
 }
 
 function tickPhysics(nodes: any[], links: any[], cfg: any = {}) {
-  const { charge = -220, linkDistance = 64, linkStrength = 0.05, center = 0.018, damping = 0.9, maxSpeed = 3 } = cfg;
+  const { charge = -800, linkDistance = 120, linkStrength = 0.02, center = 0.008, damping = 0.9, maxSpeed = 5 } = cfg; // Increased repulsion and link distance
   
   // Repulsion
   for (let i = 0; i < nodes.length; i++) {
@@ -154,17 +190,17 @@ function tickPhysics(nodes: any[], links: any[], cfg: any = {}) {
 
 // Layout helpers
 function applyRadialByType(nodes: any[]) {
-  const groups = new Map();
+  const groups = new Map<string, any[]>();
   nodes.forEach((n) => { 
     const t = n.type || "Unknown"; 
     if (!groups.has(t)) groups.set(t, []); 
-    groups.get(t).push(n); 
+    groups.get(t)!.push(n); 
   });
   const types = Array.from(groups.keys());
   const baseR = 140; 
   const ringGap = 90;
   types.forEach((t, ringIdx) => {
-    const ring = groups.get(t);
+    const ring = groups.get(t)!;
     const R = baseR + ringIdx * ringGap;
     const step = (Math.PI * 2) / Math.max(1, ring.length);
     for (let i = 0; i < ring.length; i++) {
@@ -189,7 +225,7 @@ function applyTimeline(nodes: any[]) {
     maxY = 2025; 
   }
   const span = maxY - minY || 1;
-  const yBuckets = new Map();
+  const yBuckets = new Map<string, number>();
   nodes.forEach((n) => { 
     const t = n.type || "Other"; 
     if (!yBuckets.has(t)) yBuckets.set(t, 0); 
@@ -200,7 +236,7 @@ function applyTimeline(nodes: any[]) {
     const yv = (sy ?? ey ?? minY);
     const x = ((yv - minY) / span - 0.5) * 900;
     const t = n.type || "Other"; 
-    const idx = yBuckets.get(t); 
+    const idx = yBuckets.get(t)!; 
     yBuckets.set(t, idx + 1);
     
     n.fx = x; 
@@ -229,7 +265,10 @@ function CanvasForceGraph({
   pathSet, 
   showTraits, 
   layoutMode = "force", 
-  onFrame 
+  onFrame,
+  resetCounter,
+  zoomInCounter,
+  zoomOutCounter,
 }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<any[]>([]);
@@ -322,6 +361,33 @@ function CanvasForceGraph({
     loop();
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, linkStyle, nodeStyle, pathSet, showTraits, width, height, onFrame]);
+
+  // External view controls
+  useEffect(() => {
+    if (!width || !height) return;
+    const t = transformRef.current;
+    t.k = 1;
+    t.x = width / 2;
+    t.y = height / 2;
+  }, [resetCounter, width, height]);
+
+  useEffect(() => {
+    if (!width || !height || !zoomInCounter) return;
+    const t = transformRef.current;
+    const cx = width / 2; const cy = height / 2;
+    const wx = (cx - t.x) / t.k; const wy = (cy - t.y) / t.k;
+    const nextK = Math.min(3, t.k * 1.2);
+    t.x = cx - wx * nextK; t.y = cy - wy * nextK; t.k = nextK;
+  }, [zoomInCounter, width, height]);
+
+  useEffect(() => {
+    if (!width || !height || !zoomOutCounter) return;
+    const t = transformRef.current;
+    const cx = width / 2; const cy = height / 2;
+    const wx = (cx - t.x) / t.k; const wy = (cy - t.y) / t.k;
+    const nextK = Math.max(0.2, t.k / 1.2);
+    t.x = cx - wx * nextK; t.y = cy - wy * nextK; t.k = nextK;
+  }, [zoomOutCounter, width, height]);
 
   // Event handlers
   const onMove = (e: React.MouseEvent) => {
@@ -440,10 +506,23 @@ export default function KnowledgeGraph() {
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [focusNode, setFocusNode] = useState<GraphNode | null>(null);
   const [showTraits, setShowTraits] = useState(true);
-
-  const [showFileUpload, setShowFileUpload] = useState(false);
-  const [layoutMode] = useState("force");
+  const [neighborhoodOnly, setNeighborhoodOnly] = useState(false);
+  const [pathPair] = useState({ a: "", b: "" });
+  const [isUploading, setIsUploading] = useState(false);
+  const [layoutMode, setLayoutMode] = useState("force");
+  const [pathNodes, setPathNodes] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [filterTypes] = useState(() => new Set(NODE_TYPES));
+  const [yearRange] = useState([2012, 2025]);
+  const [neighborhoodHops] = useState(2);
   const [edgeOpacity] = useState(0.35);
+  const [minDegree] = useState(0);
+  const [frameNodes, setFrameNodes] = useState<any[]>([]);
+  const [resetCounter, setResetCounter] = useState(0);
+  const [zoomInCounter, setZoomInCounter] = useState(0);
+  const [zoomOutCounter, setZoomOutCounter] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
 
   // Observe size of middle pane for canvas dims
   useEffect(() => {
@@ -457,19 +536,90 @@ export default function KnowledgeGraph() {
     return () => ro.disconnect();
   }, []);
 
-  // Simple filter based on showTraits
+  // Auto-reset view on mount to show spread-out default view
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setResetCounter(c => c + 1);
+    }, 500); // Wait for physics to settle a bit
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Build degree map
+  const degMap = useMemo(() => {
+    const d = new Map<string, number>();
+    (graph.links || []).forEach((l) => {
+      const s = l.source;
+      const t = l.target;
+      d.set(s, (d.get(s) || 0) + 1);
+      d.set(t, (d.get(t) || 0) + 1);
+    });
+    return d;
+  }, [graph]);
+
+  // Optional neighborhood filter
+  function nodesWithinHops(g: GraphData, centerId: string, hops: number) {
+    if (!centerId) return new Set<string>();
+    const adj = new Map<string, string[]>();
+    (g.links || []).forEach(({ source, target }) => {
+      const s = source;
+      const t = target;
+      if (!adj.has(s)) adj.set(s, []);
+      if (!adj.has(t)) adj.set(t, []);
+      adj.get(s)!.push(t);
+      adj.get(t)!.push(s);
+    });
+    const keep = new Set<string>([centerId]);
+    let frontier = [centerId];
+    for (let h = 0; h < hops; h++) {
+      const next: string[] = [];
+      for (const u of frontier) {
+        for (const v of adj.get(u) || []) {
+          if (!keep.has(v)) {
+            keep.add(v);
+            next.push(v);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return keep;
+  }
+
+  // Enhanced filter + search
   const filtered = useMemo(() => {
+    const text = query.trim().toLowerCase();
     let nodes = (graph.nodes || []).filter((n) => {
+      if (!filterTypes.has(n.type)) return false;
+      if (text && !(n.label || String(n.id)).toLowerCase().includes(text)) return false;
+      if (n.start || n.end) {
+        const sY = year(n.start) ?? -Infinity;
+        const eY = year(n.end) ?? Infinity;
+        if (eY < yearRange[0] || sY > yearRange[1]) return false;
+      }
       if (!showTraits && n.type === "Trait") return false;
+      if ((degMap.get(n.id) || 0) < minDegree) return false;
       return true;
     });
+
+    // Neighborhood cut
+    if (neighborhoodOnly && (focusNode?.id || text)) {
+      const center = focusNode?.id || nodes.find((n) => (n.label || n.id).toLowerCase().includes(text))?.id;
+      if (center) {
+        const keep = nodesWithinHops(graph, center, neighborhoodHops);
+        nodes = nodes.filter((n) => keep.has(n.id));
+      }
+    }
 
     const keep = new Set(nodes.map((n) => n.id));
     const links = (graph.links || []).filter((l) => 
       keep.has(l.source) && keep.has(l.target)
     );
     return { nodes, links };
-  }, [graph, showTraits]);
+  }, [graph, filterTypes, query, yearRange, showTraits, neighborhoodOnly, neighborhoodHops, focusNode, minDegree, degMap]);
+
+  useEffect(() => {
+    setPathNodes(shortestPath(graph, pathPair.a, pathPair.b));
+  }, [graph, pathPair.a, pathPair.b]);
 
 
 
@@ -480,11 +630,19 @@ export default function KnowledgeGraph() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    console.log("🚀 Starting file upload process...");
+    console.log("📁 Files selected:", files.length);
+    
+    setIsUploading(true);
+    
     try {
+      console.log(`Processing ${files.length} CSV files...`);
       const fileContents: Record<string, string> = {};
       
       for (const file of files) {
+        console.log(`📖 Reading file: ${file.name} (${file.size} bytes)`);
         const content = await file.text();
+        console.log(`📄 File content preview:`, content.substring(0, 200) + "...");
         fileContents[file.name] = content;
       }
 
@@ -493,37 +651,86 @@ export default function KnowledgeGraph() {
       const allLinks: Record<string, string>[] = [];
 
       Object.entries(fileContents).forEach(([filename, content]) => {
-        if (filename.startsWith('nodes_')) {
-          const rows = content.split('\n').map(row => row.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')));
-          const headers = rows[0];
-          const data = rows.slice(1).map(row => {
-            const obj: Record<string, string> = {};
-            headers.forEach((header, i) => {
-              obj[header] = row[i] || '';
-            });
-            return obj;
-          });
+        console.log(`🔍 Processing file: ${filename}`);
+        console.log(`   Content length: ${content.length} characters`);
+        console.log(`   Lines: ${content.split('\n').length}`);
+        
+        // Parse CSV content using robust parser (handles commas/semicolons/tabs and quotes)
+        const data = parseCSVContent(content);
+        console.log(`   Parsed ${data.length} rows`);
+        const headers = data.length ? Object.keys(data[0]) : [];
+        console.log(`   Headers found:`, headers);
+
+        console.log(`📋 File: ${filename}`);
+        console.log(`   Headers: [${headers.join(', ')}]`);
+        console.log(`   Data rows: ${data.length}`);
+        console.log(`   Sample row:`, data[0] || 'No data');
+
+        // Auto-detect if this is a nodes or edges file based on content (case/format insensitive)
+        const normalize = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normHeaders = new Set(headers.map(normalize));
+        const hasNodeFields = ['id','name','label','type','nodetype','category'].some(k => normHeaders.has(k));
+        const hasEdgeFields = ['source','sourceid','from','target','targetid','to','relation','relationship','predicate'].some(k => normHeaders.has(k));
+
+        console.log(`   Has node fields: ${hasNodeFields} (${headers.filter(h => ['id', 'ID', 'name', 'Name', 'label', 'Label', 'node_type', 'type', 'Type'].includes(h)).join(', ')})`);
+        console.log(`   Has edge fields: ${hasEdgeFields} (${headers.filter(h => ['source', 'Source', 'source_id', 'Source_ID', 'target', 'Target', 'target_id', 'Target_ID', 'relation', 'Relation'].includes(h)).join(', ')})`);
+
+        if (hasNodeFields && !hasEdgeFields) {
+          // This looks like a nodes file
           allNodes.push(...data);
-        } else if (filename.startsWith('edges_')) {
-          const rows = content.split('\n').map(row => row.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')));
-          const headers = rows[0];
-          const data = rows.slice(1).map(row => {
-            const obj: Record<string, string> = {};
-            headers.forEach((header, i) => {
-              obj[header] = row[i] || '';
-            });
-            return obj;
-          });
+          console.log(`✅ Detected nodes file: ${filename} with ${data.length} nodes`);
+        } else if (hasEdgeFields) {
+          // This looks like an edges file
           allLinks.push(...data);
+          console.log(`🔗 Detected edges file: ${filename} with ${data.length} links`);
+        } else if (filename.toLowerCase().includes('node')) {
+          // Fallback: filename suggests nodes
+          allNodes.push(...data);
+          console.log(`📝 Fallback: treating ${filename} as nodes file with ${data.length} nodes`);
+        } else if (filename.toLowerCase().includes('edge') || filename.toLowerCase().includes('link')) {
+          // Fallback: filename suggests edges
+          allLinks.push(...data);
+          console.log(`🔗 Fallback: treating ${filename} as edges file with ${data.length} links`);
+        } else {
+          // Last resort: try to guess based on content structure
+          if (data.length > 0 && Object.keys(data[0]).length >= 3) {
+            // If it has enough columns, assume it's nodes
+            allNodes.push(...data);
+            console.log(`🤔 Auto-detected ${filename} as nodes file with ${data.length} nodes`);
+          } else {
+            console.warn(`⚠️ Could not determine file type for ${filename}, skipping`);
+          }
         }
       });
 
+      console.log(`📊 Total collected: ${allNodes.length} nodes, ${allLinks.length} links`);
+      console.log(`📋 All nodes:`, allNodes);
+      console.log(`🔗 All links:`, allLinks);
+      
+      if (allNodes.length === 0) {
+        alert("❌ No nodes found in CSV files. Please check that your CSV files contain node data with columns like 'id', 'name', 'type', etc.");
+        return;
+      }
+
+      console.log("🔧 Calling buildGraphFromCSV...");
       const newGraph = buildGraphFromCSV(allNodes, allLinks);
+      console.log("🎯 New graph created:", newGraph);
       setGraph(newGraph);
-      setShowFileUpload(false);
+      
+      // Reset view to show the new data
+      setTimeout(() => {
+        setResetCounter(c => c + 1);
+      }, 100);
+      
+      alert(`🎉 Successfully loaded ${newGraph.nodes.length} nodes and ${newGraph.links.length} links!\n\nYour knowledge graph is now ready for analysis.`);
     } catch (error) {
-      console.error("Error parsing CSV files:", error);
-      alert("Error parsing CSV files. Please check the file format.");
+      console.error("❌ Error parsing CSV files:", error);
+      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+      alert(`❌ Error parsing CSV files: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsUploading(false);
+      // Reset the file input so the same file can be selected again
+      event.target.value = '';
     }
   };
 
@@ -651,6 +858,8 @@ export default function KnowledgeGraph() {
 
 
 
+  const pathSet = new Set(pathNodes);
+
   const canvasProps = {
     graphData: filtered,
     width: dims.w,
@@ -661,157 +870,201 @@ export default function KnowledgeGraph() {
     nodeStyle: drawNode,
     linkStyle: linkColor,
     focusNode,
+    pathSet,
     showTraits,
     layoutMode,
+    onFrame: (nodes: any[]) => setFrameNodes(nodes),
+    resetCounter,
+    zoomInCounter,
+    zoomOutCounter,
   };
 
 
 
+  function exportGraph() {
+    try {
+      const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "knowledge-graph.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  useEffect(() => {
+    setDetailsOpen(!!focusNode);
+  }, [focusNode]);
+
   return (
-    <div className="w-full h-screen bg-neutral-900 text-slate-50 p-4">
-      <div className="max-w-7xl mx-auto">
-        <motion.div 
-          initial={{ opacity: 0, y: -8 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          className="rounded-2xl shadow-lg bg-neutral-800 p-4 mb-4"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-5 h-5" />
-              <h2 className="text-lg font-semibold">Knowledge Graph Explorer</h2>
+    <div className="relative w-full h-screen bg-neutral-950 text-slate-50">
+      {/* Top bar */}
+      <div className="fixed top-0 left-0 right-0 z-30 backdrop-blur bg-neutral-900/70 border-b border-neutral-800">
+        {graph === starterData && (
+          <div className="bg-amber-900/20 border-b border-amber-700/30 px-4 py-2 text-center">
+            <div className="text-amber-200 text-sm">
+              📊 Showing sample data. Click "Load CSV Data" to visualize your own knowledge graph!
             </div>
-            <button
-              onClick={() => setShowFileUpload(!showFileUpload)}
-              className="bg-indigo-600 hover:bg-indigo-500 rounded-xl px-3 py-2 text-sm flex items-center gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              {showFileUpload ? "Hide" : "Upload CSV"}
+          </div>
+        )}
+        <div className="mx-auto max-w-[1600px] px-4 py-2 flex items-center gap-3">
+          <div className="flex items-center gap-2 pr-2">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <div className="font-semibold tracking-wide">Graph Explorer</div>
+          </div>
+          <div className="flex-1 max-w-xl relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search nodes, skills, companies..."
+              className="w-full bg-neutral-800/90 border border-neutral-700 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div className="text-xs text-slate-400 max-w-xs hidden xl:block">
+            {graph === starterData ? "Showing sample data - use 'Load CSV Data' to load your own" : `Loaded ${graph.nodes.length} nodes, ${graph.links.length} links`}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={() => setPlaying((p) => !p)} className="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+              {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              <span className="hidden sm:block">{playing ? "Pause" : "Play"}</span>
+            </button>
+            <select value={layoutMode} onChange={(e) => setLayoutMode(e.target.value)} className="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-2 text-sm border border-neutral-700">
+              <option value="force">Force</option>
+              <option value="radial">Radial</option>
+              <option value="timeline">Timeline</option>
+            </select>
+            <label className={`cursor-pointer rounded-lg px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors shadow-lg ${
+              isUploading 
+                ? 'bg-blue-600 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-500 hover:shadow-xl'
+            }`}>
+              <FileText className="w-5 h-5" />
+              <span className="text-white font-semibold">{isUploading ? 'Processing...' : 'Load CSV Data'}</span>
+              <input 
+                type="file" 
+                multiple 
+                accept=".csv" 
+                onChange={handleFileUpload} 
+                className="hidden"
+                disabled={isUploading}
+              />
+            </label>
+            <div className="hidden lg:block text-xs text-slate-400 ml-2 max-w-xs">
+              CSV files should contain columns like: id, name, type for nodes; source, target, relation for links
+            </div>
+            <div className="text-xs text-blue-300 ml-2 max-w-xs">
+              💡 Upload both nodes and links CSV files together
+            </div>
+            <button onClick={exportGraph} className="bg-emerald-700 hover:bg-emerald-600 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:block">Export</span>
+            </button>
+            <label className="flex items-center gap-2 text-sm ml-2">
+              <input type="checkbox" checked={showTraits} onChange={(e) => setShowTraits(e.target.checked)} />
+              <span className="hidden sm:block">Traits</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm ml-2">
+              <input type="checkbox" checked={neighborhoodOnly} onChange={(e) => setNeighborhoodOnly(e.target.checked)} />
+              <span className="hidden sm:block">Neighborhood</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Graph viewport */}
+      <div className={`pt-12 w-full h-full ${graph === starterData ? 'pt-20' : 'pt-12'}`} ref={containerRef}>
+        <div className="relative w-full h-[calc(100vh-48px)]">
+          <CanvasForceGraph {...canvasProps} />
+
+          {/* Floating zoom controls */}
+          <div className="absolute right-4 bottom-4 z-20 flex flex-col gap-2">
+            <button onClick={() => setZoomInCounter((c) => c + 1)} className="w-9 h-9 bg-neutral-800/80 hover:bg-neutral-700/80 rounded-lg flex items-center justify-center text-slate-200 border border-neutral-700">
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button onClick={() => setZoomOutCounter((c) => c + 1)} className="w-9 h-9 bg-neutral-800/80 hover:bg-neutral-700/80 rounded-lg flex items-center justify-center text-slate-200 border border-neutral-700">
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button onClick={() => setResetCounter((c) => c + 1)} className="w-9 h-9 bg-neutral-800/80 hover:bg-neutral-700/80 rounded-lg flex items-center justify-center text-slate-200 border border-neutral-700">
+              <RotateCcw className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-sm text-slate-300">
-            Interactive knowledge graph visualization with physics simulation. 
-            {graph.nodes.length > 0 && ` Showing ${graph.nodes.length} nodes and ${graph.links.length} connections.`}
-          </p>
-        </motion.div>
 
-        {/* File Upload Section */}
-        {showFileUpload && (
-          <motion.div 
-            initial={{ opacity: 0, height: 0 }} 
-            animate={{ opacity: 1, height: "auto" }} 
-            className="rounded-2xl shadow-lg bg-neutral-800 p-4 mb-4"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">Upload CSV Files</h3>
-              <button onClick={() => setShowFileUpload(false)} className="text-slate-400 hover:text-slate-200">
+          {/* Minimap */}
+          <div className="absolute left-4 bottom-4 z-20 bg-neutral-900/80 border border-neutral-700 backdrop-blur rounded-xl p-2">
+            <Minimap width={160} height={120} nodes={frameNodes} />
+          </div>
+
+          {/* Hover tooltip */}
+          {hoverNode && (
+            <div className={`pointer-events-none absolute left-4 z-20 bg-neutral-800/90 backdrop-blur rounded-xl px-3 py-2 text-sm text-slate-200 shadow border border-neutral-700 ${graph === starterData ? 'top-20' : 'top-16'}`}>
+              <div className="font-medium">{hoverNode.label || hoverNode.id}</div>
+              <div className="text-xs text-slate-400">{hoverNode.type}</div>
+            </div>
+          )}
+
+          {/* Details drawer */}
+          <div className={`absolute top-0 right-0 h-full w-[340px] bg-neutral-900/95 backdrop-blur border-l border-neutral-800 z-30 transition-transform duration-300 ${detailsOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className="p-4 flex items-center justify-between border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-slate-400" />
+                <span className="font-semibold">Details</span>
+              </div>
+              <button onClick={() => { setFocusNode(null); setDetailsOpen(false); }} className="text-slate-400 hover:text-slate-200">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-sm text-slate-300 mb-3">
-              Select multiple CSV files from your knowledge_graph_updated folder. 
-              The app will automatically detect nodes_* and edges_* files.
-            </p>
-            <input
-              type="file"
-              multiple
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
-            />
-          </motion.div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Controls */}
-          <div className="space-y-4">
-            <motion.div 
-              initial={{ opacity: 0, y: -8 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              className="rounded-2xl shadow-lg bg-neutral-800 p-4"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4" />
-                <span className="font-semibold">Controls</span>
-              </div>
-              
-              <div className="space-y-3">
-                <button 
-                  onClick={() => setPlaying(!playing)} 
-                  className="w-full bg-neutral-700 hover:bg-neutral-600 rounded-xl px-3 py-2 text-sm flex items-center gap-2 justify-center"
-                >
-                  {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                  {playing ? "Pause" : "Play"}
-                </button>
-                
-                <label className="flex items-center gap-2 text-sm">
-                  <input 
-                    type="checkbox" 
-                    checked={showTraits} 
-                    onChange={(e) => setShowTraits(e.target.checked)} 
-                  />
-                  Show trait halo
-                </label>
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, y: -8 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              className="rounded-2xl shadow-lg bg-neutral-800 p-4"
-            >
-              <div className="text-xs uppercase text-slate-400 mb-2">Legend</div>
-              <div className="grid grid-cols-1 gap-2 text-sm max-h-60 overflow-y-auto">
-                {NODE_TYPES.map((t) => (
-                  <div key={t} className="flex items-center gap-2">
-                    <span 
-                      className="inline-block w-3 h-3 rounded-full" 
-                      style={{ background: TYPE_META[t as keyof typeof TYPE_META]?.color }} 
-                    />
-                    {t}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Graph Canvas */}
-          <div className="lg:col-span-3">
-            <div className="rounded-2xl overflow-hidden bg-neutral-950">
-              <CanvasForceGraph {...canvasProps} />
+            <div className="p-4 text-sm">
+              {focusNode ? (
+                <div className="space-y-3">
+                  <div className="text-base font-semibold">{focusNode.label || focusNode.id}</div>
+                  <div className="flex justify-between"><span className="text-slate-400">Type</span><span className="text-slate-200">{focusNode.type}</span></div>
+                  {focusNode.start && <div className="flex justify-between"><span className="text-slate-400">Start</span><span className="text-slate-200">{focusNode.start}</span></div>}
+                  {focusNode.end && <div className="flex justify-between"><span className="text-slate-400">End</span><span className="text-slate-200">{focusNode.end}</span></div>}
+                  {focusNode.traits && (
+                    <div>
+                      <div className="text-slate-400 mb-1">Traits</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(focusNode.traits as any).map(([k, v]) => (
+                          <div key={k} className="flex items-center justify-between bg-neutral-800 rounded-lg px-2 py-1">
+                            <span>{k}</span>
+                            <span className="text-slate-300">{Number(v as number).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-slate-400">Click a node to see details.</div>
+              )}
             </div>
-            
-            {/* Hover tooltip */}
-            {hoverNode && (
-              <div className="mt-4 bg-neutral-800/90 backdrop-blur rounded-xl px-3 py-2 text-sm text-slate-200 shadow">
-                <div className="font-medium">{hoverNode.label || hoverNode.id}</div>
-                <div className="text-xs text-slate-400">{hoverNode.type}</div>
-                {hoverNode.source && (
-                  <div className="text-xs text-slate-400 mt-1">Source: {hoverNode.source}</div>
-                )}
-              </div>
-            )}
-
-            {/* Focus node details */}
-            {focusNode && (
-              <div className="mt-4 bg-neutral-800/90 backdrop-blur rounded-xl p-3 text-sm text-slate-200 shadow">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">{focusNode.label || focusNode.id}</h4>
-                  <button onClick={() => setFocusNode(null)} className="text-slate-400 hover:text-slate-200">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="space-y-1 text-xs">
-                  <div><span className="text-slate-400">Type:</span> {focusNode.type}</div>
-                  {focusNode.source && <div><span className="text-slate-400">Source:</span> {focusNode.source}</div>}
-                  {focusNode.confidence && <div><span className="text-slate-400">Confidence:</span> {focusNode.confidence}</div>}
-                  {focusNode.start && <div><span className="text-slate-400">Start:</span> {focusNode.start}</div>}
-                  {focusNode.end && <div><span className="text-slate-400">End:</span> {focusNode.end}</div>}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+// Minimap component
+function Minimap({ width = 160, height = 120, nodes = [] as any[] }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return; const ctx = c.getContext('2d'); if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, width, height);
+    if (!nodes.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes as any[]) { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); }
+    const pad = 20; const sx = (width - pad * 2) / Math.max(1, maxX - minX); const sy = (height - pad * 2) / Math.max(1, maxY - minY); const s = Math.min(sx, sy);
+    for (const n of nodes as any[]) {
+      const x = pad + (n.x - minX) * s; const y = pad + (n.y - minY) * s;
+      // @ts-ignore TYPE_META available in module scope
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      const color = (TYPE_META as any)[n.type]?.color || '#94a3b8';
+      ctx.fillStyle = color; ctx.fillRect(x - 1, y - 1, 2, 2);
+    }
+  }, [nodes, width, height]);
+  return <canvas ref={ref} width={width} height={height} className="rounded-lg" />;
 }
