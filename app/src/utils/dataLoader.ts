@@ -15,6 +15,8 @@ export interface GraphNode {
 export interface GraphLink {
   source: string;
   target: string;
+  source_id?: string;  // Alternative format from CSV
+  target_id?: string;  // Alternative format from CSV
   relation: string;
   source_file?: string;
   source_type?: string;
@@ -305,13 +307,26 @@ export function buildGraphFromCSV(
   console.log("🔗 Building links...");
   const links: GraphLink[] = linksCSV.map((row, index) => {
     console.log(`   Processing link row ${index}:`, row);
+    console.log(`   Available columns:`, Object.keys(row));
     
     // Try to find source and target - handle both 'source'/'target' and 'source_id'/'target_id' (your CSV uses source_id/target_id)
-    const source = findColumn(row, ['source', 'source_id', 'sourceid', 'from', 'start', 'src', 'head', 'subject', 's']);
-    const target = findColumn(row, ['target', 'target_id', 'targetid', 'to', 'end', 'dst', 'tail', 'object', 'o']);
+    const source = findColumn(row, ['source_id', 'sourceid', 'source', 'from', 'start', 'src', 'head', 'subject', 's']);
+    const target = findColumn(row, ['target_id', 'targetid', 'target', 'to', 'end', 'dst', 'tail', 'object', 'o']);
     
     console.log(`     Source found: "${source}"`);
     console.log(`     Target found: "${target}"`);
+    
+    // Debug: show what values are in each possible column
+    ['source_id', 'sourceid', 'source', 'from'].forEach(col => {
+      if (row[col] !== undefined) {
+        console.log(`       ${col}: "${row[col]}"`);
+      }
+    });
+    ['target_id', 'targetid', 'target', 'to'].forEach(col => {
+      if (row[col] !== undefined) {
+        console.log(`       ${col}: "${row[col]}"`);
+      }
+    });
     
     // Try to find relation field
     const relation = findColumn(row, ['relation', 'relationship', 'rel', 'edge', 'edge_type', 'type', 'predicate', 'label']) || 'related';

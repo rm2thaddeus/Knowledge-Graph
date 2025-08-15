@@ -509,7 +509,7 @@ export default function KnowledgeGraph() {
   const [neighborhoodOnly, setNeighborhoodOnly] = useState(false);
   const [pathPair] = useState({ a: "", b: "" });
   const [isUploading, setIsUploading] = useState(false);
-  const [layoutMode, setLayoutMode] = useState("force");
+  const [layoutMode, setLayoutMode] = useState("radial");
   const [pathNodes, setPathNodes] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [filterTypes] = useState(() => new Set(NODE_TYPES));
@@ -574,6 +574,15 @@ export default function KnowledgeGraph() {
       d.set(s, (d.get(s) || 0) + 1);
       d.set(t, (d.get(t) || 0) + 1);
     });
+    
+    // Debug: log the degree map
+    console.log(`🔢 Degree map built:`, {
+      totalLinks: graph.links?.length || 0,
+      totalNodes: graph.nodes?.length || 0,
+      nodesWithConnections: d.size,
+      sampleDegrees: Array.from(d.entries()).slice(0, 5)
+    });
+    
     return d;
   }, [graph]);
 
@@ -618,13 +627,16 @@ export default function KnowledgeGraph() {
         if (eY < yearRange[0] || sY > yearRange[1]) return false;
       }
       if (!showTraits && n.type === "Trait") return false;
-      if ((degMap.get(n.id) || 0) < minDegree) return false;
+      
+      const nodeDegree = degMap.get(n.id) || 0;
+      if (nodeDegree < minDegree) return false;
+      
       return true;
     });
 
     // Neighborhood cut
     if (neighborhoodOnly && (focusNode?.id || text)) {
-      const center = focusNode?.id || nodes.find((n) => (n.label || n.id).toLowerCase().includes(text))?.id;
+      const center = focusNode?.id || nodes.find((n) => (n.label || String(n.id)).toLowerCase().includes(text))?.id;
       if (center) {
         const keep = nodesWithinHops(graph, center, neighborhoodHops);
         nodes = nodes.filter((n) => keep.has(n.id));
@@ -632,9 +644,39 @@ export default function KnowledgeGraph() {
     }
 
     const keep = new Set(nodes.map((n) => n.id));
-    const links = (graph.links || []).filter((l) => 
-      keep.has(l.source) && keep.has(l.target)
-    );
+    const links = (graph.links || []).filter((l) => {
+      // Handle both source/target and source_id/target_id formats
+      const sourceId = l.source || l.source_id;
+      const targetId = l.target || l.target_id;
+      
+      // Debug: log what's happening with link filtering
+      if (!keep.has(sourceId) || !keep.has(targetId)) {
+        console.log(`🔗 Link filtered out:`, {
+          link: l,
+          sourceId,
+          targetId,
+          sourceInKeep: keep.has(sourceId),
+          targetInKeep: keep.has(targetId),
+          keepSize: keep.size
+        });
+      }
+      
+      return keep.has(sourceId) && keep.has(targetId);
+    });
+    
+    // Debug: log filtering results
+    console.log(`🔍 Filtering results:`, {
+      originalNodes: graph.nodes?.length || 0,
+      originalLinks: graph.links?.length || 0,
+      filteredNodes: nodes.length,
+      filteredLinks: links.length,
+      query: text,
+      minDegree,
+      showTraits,
+      neighborhoodOnly,
+      focusNode: focusNode?.id
+    });
+    
     return { nodes, links };
   }, [graph, filterTypes, query, yearRange, showTraits, neighborhoodOnly, neighborhoodHops, focusNode, minDegree, degMap]);
 
@@ -799,11 +841,24 @@ export default function KnowledgeGraph() {
       addDebugLog("🏗️ Building graph from CSV data...");
       const newGraph = buildGraphFromCSV(allNodes, allLinks);
       
-      // Additional validation
+      // Additional validation and debugging
+      addDebugLog(`🔍 Graph built: ${newGraph.nodes.length} nodes, ${newGraph.links.length} links`);
+      console.log(`🔍 Final graph data:`, newGraph);
+      
       if (newGraph.nodes.length === 0) {
         addDebugLog("❌ Failed to parse any valid nodes");
         alert("❌ Failed to parse any valid nodes from CSV files. Please check your data format.");
         return;
+      }
+      
+      // Debug: show what links were actually created
+      if (newGraph.links.length > 0) {
+        addDebugLog(`🔗 Links created: ${newGraph.links.length}`);
+        console.log(`🔗 Sample links:`, newGraph.links.slice(0, 3));
+        addDebugLog(`🔗 Sample link: ${JSON.stringify(newGraph.links[0]).substring(0, 100)}...`);
+      } else {
+        addDebugLog("⚠️ No links created from edge data");
+        console.log("⚠️ No links created from edge data - this suggests a problem in buildGraphFromCSV");
       }
       
       addDebugLog(`✅ Successfully built graph with ${newGraph.nodes.length} nodes and ${newGraph.links.length} links`);
@@ -986,6 +1041,16 @@ export default function KnowledgeGraph() {
     zoomOutCounter,
   };
 
+  // Debug: log what's being passed to canvas
+  useEffect(() => {
+    console.log(`🎨 Canvas props updated:`, {
+      nodes: filtered.nodes.length,
+      links: filtered.links.length,
+      layoutMode,
+      playing: playing && layoutMode === "force"
+    });
+    addDebugLog(`🎨 Rendering: ${filtered.nodes.length} nodes, ${filtered.links.length} links`);
+  }, [filtered.nodes.length, filtered.links.length, layoutMode, playing]);
 
 
   function exportGraph() {
