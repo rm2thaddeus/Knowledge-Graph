@@ -1,0 +1,37 @@
+meta:
+  template: feature-scope
+  recommended_phase: MVP
+  reference: "AGENTS.md & Agent-Native Development (2025)"
+  usage:
+    - Anchor MVP planning discussions.
+    - Provide traceability from ideation through implementation.
+
+feature:
+  name: ""
+  author: ""
+  date: "2025-01-22"
+  status: Draft
+  linked_ideas:
+    - docs/ideation-room/discovery-log.md#
+  linked_experiments:
+    - docs/poc-room/transition-log.md#
+  problem_statement: ""
+  target_persona: ""
+  outcomes:
+    - metric: ""
+      baseline: ""
+      target: ""
+  scope_inclusions:
+    - ""
+  scope_exclusions:
+    - ""
+  dependencies:
+    - ""
+  acceptance_criteria:
+    - ""
+  instrumentation_plan:
+    - ""
+  rollout_strategy:
+    - stage: ""
+      audience: ""
+      success_signal: ""

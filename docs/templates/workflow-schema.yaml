@@ -1,0 +1,48 @@
+meta:
+  template: workflow-schema
+  reference: "AGENTS.md & Agent-Native Development (2025)"
+  purpose: "Model multi-agent handoffs across lifecycle phases."
+
+workflow:
+  name: ""
+  created_by: ""
+  date: "2025-01-22"
+  description: ""
+  phases:
+    - phase: Ideation
+      entry_conditions:
+        - ""
+      exit_criteria:
+        - ""
+      artifacts:
+        - docs/ideation-room/discovery-log.md
+      next_phase: PoC
+    - phase: PoC
+      entry_conditions:
+        - ""
+      exit_criteria:
+        - ""
+      artifacts:
+        - docs/poc-room/transition-log.md
+      next_phase: MVP
+    - phase: MVP
+      entry_conditions:
+        - ""
+      exit_criteria:
+        - ""
+      artifacts:
+        - docs/mvp-room/feature-roadmap.md
+      next_phase: Production
+    - phase: Production
+      entry_conditions:
+        - ""
+      exit_criteria:
+        - ""
+      artifacts:
+        - docs/production-room/operational-readiness.md
+      next_phase: Continuous Improvement
+  governance:
+    approvers:
+      - name: ""
+        role: ""
+    review_cadence: "Monthly"
