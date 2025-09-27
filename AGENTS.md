@@ -8,6 +8,7 @@
 - CSV ingestion utilities live in `app/src/utils/` and demo assets under `app/public/`.
 - Planning artifacts and lifecycle records live under `docs/`.
 
+
 ## Workflow Expectations
 1. **Prefer working within scoped subdirectories.** Always read the nearest `AGENTS.md` before editing files.
 2. **Node & npm versions:** Use Node.js 18.x (or newer LTS) with npm 10+. If a version mismatch is detected, surface it instead of forcing installation.
