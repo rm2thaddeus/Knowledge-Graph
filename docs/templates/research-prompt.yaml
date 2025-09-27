@@ -1,0 +1,27 @@
+meta:
+  template: research-prompt
+  recommended_phase: Ideation
+  reference: "AGENTS.md & Agent-Native Development (2025)"
+  instructions:
+    - Capture insights without storing sensitive data.
+    - Summarize key questions, evidence, and next steps.
+
+prompt:
+  title: ""
+  author: ""
+  date: "2025-01-22"
+  status: Proposed
+  topic: ""
+  questions:
+    - ""
+  evidence_sources:
+    - description: ""
+      link: ""
+  insights:
+    - ""
+  open_risks:
+    - ""
+  recommended_next_experiments:
+    - description: ""
+      owner: ""
+      due: ""

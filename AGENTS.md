@@ -6,6 +6,8 @@
 - React + TypeScript knowledge graph explorer located under `app/`.
 - Front-end build powered by Vite with Tailwind CSS and Framer Motion.
 - CSV ingestion utilities live in `app/src/utils/` and demo assets under `app/public/`.
+- Planning artifacts and lifecycle records live under `docs/`.
+
 
 ## Workflow Expectations
 1. **Prefer working within scoped subdirectories.** Always read the nearest `AGENTS.md` before editing files.

@@ -1,0 +1,13 @@
+ask_context:
+  goal: "Onboard quickly to the Knowledge Graph initiative"
+  prioritize:
+    - docs/poc-room/transition-log.md
+    - docs/mvp-room/feature-roadmap.md
+    - docs/production-room/operational-readiness.md
+  agent_should:
+    - summarize_recent: true
+    - flag_unknowns: true
+    - link_to_code: app/src
+  escalation:
+    - contact: "core-maintainers@knowledge-graph.local"
+      when: "Blocking decisions or missing data"
