@@ -1,109 +1,186 @@
-# Knowledge Graph Explorer
+# Knowledge Graph Job Search Explorer
 
-An interactive knowledge graph visualization application built with React, TypeScript, and Canvas. This project provides a foundation for exploring and visualizing knowledge graphs with physics-based layouts and interactive features.
+> **⚠️ EARLY ALPHA VERSION** - This is an experimental application exploring the use of knowledge graphs for job searching and career mapping.
 
-## Features
+## 🎯 Project Overview
 
-- **Interactive Graph Visualization**: Canvas-based rendering with smooth animations
-- **Physics Simulation**: Force-directed layout with customizable parameters
-- **Node Types**: Support for different entity types (Person, Organization, Role, Skill, Project, etc.)
-- **Trait Visualization**: Personality trait analysis with color-coded halos
-- **Responsive Design**: Modern UI with Tailwind CSS and Framer Motion
-- **TypeScript**: Full type safety and modern development experience
+This application explores how **knowledge graphs** can revolutionize job searching by creating visual, interconnected representations of:
+- **Professional Skills** and their relationships
+- **Career Paths** and progression opportunities  
+- **Industry Connections** and networking potential
+- **Job Requirements** mapped to personal capabilities
+- **Learning Paths** for skill development
 
-## Project Structure
+The goal is to transform traditional linear job searching into an interactive, network-based exploration that reveals hidden opportunities and career trajectories.
+
+## 🚀 Quick Start
+
+### Option 1: Double-Click to Run (Windows)
+1. Download the project files
+2. Double-click `start-app.bat` in the `app` folder
+3. The app will open in your default browser at `http://localhost:5173`
+
+### Option 2: Manual Setup
+```bash
+cd app
+npm install
+npm run dev
+```
+
+## 🏗️ Architecture
+
+This is a **React + TypeScript** application built with:
+- **Frontend**: React 19 + TypeScript + Tailwind CSS
+- **Visualization**: Custom Canvas-based graph rendering
+- **Data Processing**: CSV parsing with automatic column detection
+- **Build Tool**: Vite for fast development and building
+
+## 📊 Core Features
+
+### Interactive Knowledge Graph Visualization
+- **Multiple Layouts**: Force-directed, Radial, and Timeline views
+- **Real-time Interaction**: Drag, zoom, and explore connections
+- **Responsive Design**: Works on desktop and mobile devices
+
+### Data Import & Management
+- **CSV Upload**: Load your own knowledge graph data
+- **Auto-detection**: Intelligent parsing of nodes and edges
+- **Flexible Format**: Supports various column naming conventions
+- **Data Export**: Save graphs as JSON for sharing or backup
+
+### Search & Analysis
+- **Node Search**: Find specific skills, companies, or people
+- **Relationship Exploration**: Discover connections between entities
+- **Filtering**: Narrow down by type, date, or other criteria
+
+## 📁 Project Structure
 
 ```
 Knowledge-Graph/
-├── app/                    # React application
+├── app/                          # Main application
 │   ├── src/
-│   │   ├── components/    # React components
-│   │   │   └── KnowledgeGraph.tsx
-│   │   ├── App.tsx        # Main application
-│   │   └── index.css      # Tailwind CSS
-│   ├── package.json       # Dependencies
-│   └── tailwind.config.js # Tailwind configuration
-├── originalscript         # Reference implementation (not in git)
-└── .gitignore            # Git ignore rules
+│   │   ├── components/          # React components
+│   │   │   └── KnowledgeGraph.tsx  # Main graph component
+│   │   ├── utils/               # Utility functions
+│   │   │   └── dataLoader.ts    # CSV parsing logic
+│   │   ├── App.tsx              # Root component
+│   │   └── main.tsx             # Entry point
+│   ├── public/                  # Static assets
+│   ├── package.json             # Dependencies
+│   └── start-app.bat            # Windows startup script
+├── README.md                     # This file
+└── LICENSE                       # Project license
 ```
 
-## Getting Started
+## 🔧 Development
 
 ### Prerequisites
-
 - Node.js 18+ 
 - npm or yarn
 
-### Installation
+### Setup
+```bash
+# Clone the repository
+git clone <repository-url>
+cd Knowledge-Graph
 
-1. Navigate to the app directory:
-   ```bash
-   cd app
-   ```
+# Install dependencies
+cd app
+npm install
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+# Start development server
+npm run dev
+```
 
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### Available Scripts
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
 
-4. Open your browser to `http://localhost:5173`
+## 📈 Use Cases
 
-## Development
+### For Job Seekers
+- **Skill Gap Analysis**: Visualize your skills vs. job requirements
+- **Career Path Planning**: See potential career trajectories
+- **Network Mapping**: Identify key connections in your industry
+- **Learning Roadmap**: Plan skill development strategically
 
-### Adding Your Data
+### For Recruiters & HR
+- **Candidate Matching**: Visual skill-to-requirement mapping
+- **Team Composition**: Analyze skill distribution and gaps
+- **Succession Planning**: Map career progression paths
+- **Training Needs**: Identify skill development priorities
 
-To integrate your own knowledge graph data:
+### For Career Coaches
+- **Client Assessment**: Visual representation of client capabilities
+- **Goal Setting**: Map realistic career objectives
+- **Progress Tracking**: Monitor skill development over time
+- **Market Analysis**: Understand industry skill demands
 
-1. Replace the `sampleData` in `KnowledgeGraph.tsx` with your actual data
-2. Ensure your data follows the expected structure:
-   ```typescript
-   interface GraphData {
-     nodes: Array<{
-       id: string;
-       label: string;
-       type: keyof typeof TYPE_META;
-       // ... other properties
-     }>;
-     links: Array<{
-       source: string | { id: string };
-       target: string | { id: string };
-       relation: string;
-     }>;
-   }
-   ```
+## 🎨 Data Format
 
-### Customization
+### Nodes CSV (Skills, Companies, People, etc.)
+```csv
+id,name,type,source,start,end,confidence
+skill_1,Python,Skill,resume.pdf,2020-01,2023-12,0.9
+company_1,Google,Company,linkedin.pdf,,,0.8
+person_1,John Doe,Person,resume.pdf,2020-01,2023-12,0.95
+```
 
-- **Node Types**: Add new types in the `TYPE_META` object
-- **Colors & Shapes**: Customize visual appearance per node type
-- **Physics**: Adjust simulation parameters in `tickPhysics` function
-- **Layouts**: Implement new layout algorithms (radial, timeline, etc.)
+### Edges CSV (Relationships)
+```csv
+source,target,relation,source_file,confidence
+skill_1,skill_2,prerequisite,resume.pdf,0.8
+person_1,company_1,works_at,linkedin.pdf,0.9
+skill_1,job_1,required_for,job_posting.pdf,0.85
+```
 
-## Security & Privacy
+## 🚧 Current Limitations (Alpha)
 
-- **No PII in Git**: The `.gitignore` excludes personal information
-- **Reference Files**: `originalscript` and other reference files are excluded
-- **Sample Data**: Only generic example data is included in the repository
+- **Data Persistence**: No database storage yet
+- **User Accounts**: No authentication system
+- **Collaboration**: Single-user only
+- **Advanced Analytics**: Basic filtering and search
+- **Mobile Optimization**: Desktop-focused interface
 
-## Technologies Used
+## 🔮 Roadmap
 
-- **React 19** - Modern React with hooks
-- **TypeScript** - Type safety and developer experience
-- **Vite** - Fast build tool and dev server
-- **Tailwind CSS** - Utility-first CSS framework
-- **Framer Motion** - Animation library
-- **Canvas API** - High-performance 2D graphics
-- **Lucide React** - Icon library
+### Phase 2 (Beta)
+- [ ] User authentication and profiles
+- [ ] Cloud data storage
+- [ ] Advanced graph algorithms
+- [ ] Job posting integration
+- [ ] Skill recommendation engine
 
-## Contributing
+### Phase 3 (Release)
+- [ ] Multi-user collaboration
+- [ ] API for third-party integrations
+- [ ] Advanced analytics dashboard
+- [ ] Mobile app
+- [ ] Enterprise features
 
-This is a personal project for exploring knowledge graph visualization. Feel free to fork and adapt for your own needs.
+## 🤝 Contributing
 
-## License
+This is an experimental project exploring new approaches to job searching. Contributions are welcome!
 
-MIT License - see LICENSE file for details.
+### Areas of Interest
+- **Graph Algorithms**: Improve visualization and analysis
+- **Data Processing**: Enhance CSV parsing and validation
+- **UI/UX**: Better user experience and accessibility
+- **Integration**: Connect with job boards and career platforms
+- **Analytics**: Advanced insights and recommendations
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with React, TypeScript, and modern web technologies
+- Inspired by research into knowledge graphs for career development
+- Designed to explore the intersection of AI, data visualization, and job searching
+
+---
+
+**Note**: This is experimental software. Please provide feedback and report any issues you encounter while exploring knowledge graphs for job searching!
