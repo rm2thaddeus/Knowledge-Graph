@@ -51,6 +51,7 @@ Knowledge-Graph/
   - Tailwind config: shared base in `tooling/shared-config/tailwind`, with CSV-specific themes merged into Chakra styling via design tokens.
   - ESLint/TS configs: extend from `tooling/shared-config/eslint-config` and `tsconfig.base.json`.
   - Icon libraries: consolidate on `lucide-react` for CSV features and map Dev Graph Chakra components to use shared icon adapters.
+- Add shared UI package `packages/graph-ui-kit/` when common components (toolbars, legends, dataset selectors) emerge during consolidation.
 
 ## Python/Backend Dependency Alignment
 
@@ -78,6 +79,25 @@ Knowledge-Graph/
 - Mirror Pixel Detective `.cursor/rules` into `tooling/mcp-rules/` and cross-link from root `AGENTS.md`.
 - Update `docs/templates` to include new sprint/PRD templates referencing Dev Graph stack.
 - Add migration notes to `docs/production-room` covering new services and monitoring requirements.
+
+## Implementation Checklist (MVP Scope)
+
+1. **Bootstrap Unified App**
+   - [ ] Copy Next.js app into `apps/dev-graph`.
+   - [ ] Add CSV demo route that reuses existing canvas component via a shim.
+   - [ ] Wire environment variables and workspace scripts.
+2. **Port CSV Features**
+   - [ ] Migrate `KnowledgeGraph.tsx` and utilities into `apps/dev-graph/src/features/csv-explorer`.
+   - [ ] Replace Vite-specific imports (e.g., CSS) with Next.js equivalents.
+   - [ ] Validate CSV upload/export inside Next.js runtime.
+3. **Enable Dataset Switching**
+   - [ ] Create dataset context + selector (CSV session vs. Neo4j database).
+   - [ ] Implement `POST /api/internal/datasets/promote` calling FastAPI ingestion adaptor.
+   - [ ] Persist dataset metadata in Neo4j (or local JSON when offline).
+4. **Retire Legacy App**
+   - [ ] Update root README/start scripts to point to unified app.
+   - [ ] Archive Vite app and remove from workspace dependencies.
+   - [ ] Run lint/build/test pipelines to confirm parity.
 
 ## Open Questions
 

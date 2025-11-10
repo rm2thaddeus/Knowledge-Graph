@@ -65,6 +65,7 @@ Unify the existing Knowledge-Graph explorer with the Pixel Detective Dev Graph s
 - **Infrastructure Footprint**: Neo4j requires persistent volume management; ensure OneDrive sync does not conflict with database directories.
 - **Dependency Conflicts**: Tailwind vs. Chakra styling, TypeScript config alignment, and Python dependency versions must be reconciled before unified tooling.
 - **Team Adoption**: Provide training for FastAPI + Neo4j development, and update AGENT/MCP rule hierarchies to reflect the integrated stack.
+- **Performance Envelope**: WebGL dashboards rely on GPU resources; document fallback behavior when running on low-power hardware in CSV-only mode.
 
 ## Next Steps
 
@@ -73,4 +74,24 @@ Unify the existing Knowledge-Graph explorer with the Pixel Detective Dev Graph s
 3. Prototype dataset selector and CSV→Neo4j promotion flow; gather UX feedback.  
 4. Draft operational runbook skeletons so stakeholders can review early.  
 5. Schedule stakeholder review workshop once Phase 0 completes and legacy UI deprecation timeline is clear.
+
+## Stakeholder Considerations
+
+- **Exploration Users** (career mapping, CSV demos): need instant load workflow, guard against forced Neo4j setup; provide quick-start guide and sample CSV catalog.
+- **Analysts & Engineers** (Dev Graph power users): require persistent datasets, analytics dashboards, and reproducible ingestion scripts; deliver CLI templates and dataset promotion instructions.
+- **Operations & Support**: need monitoring dashboards (Neo4j health, ingestion queue), incident triage playbooks, and backup/restore procedures documented in `docs/production-room`.
+- **Leadership & Stakeholders**: expect progress visibility; publish migration status updates, risk heatmap, and adoption metrics at each phase milestone.
+
+## Testing & Validation Plan
+
+- **Frontend**: e2e flows for CSV upload, dataset promotion, dataset switching, and analytics navigation using Playwright or Cypress.
+- **Backend**: pytest suites covering ingestion adaptor, dataset metadata endpoints, and Neo4j interaction with multiple databases.
+- **Integration**: nightly Docker compose smoke test launching full stack, loading sample CSV, promoting to Neo4j, and verifying dashboards render.
+- **Performance**: benchmark large CSV ingestion vs. Neo4j queries; track frame rate on WebGL dashboards with adaptive throttling for local devices.
+
+## Communication Plan
+
+- Bi-weekly integration updates shared via `docs/production-room/progress-log.md`.
+- Stakeholder review workshop after Phase 1 to confirm dataset promotion experience meets expectations.
+- Release notes accompanying each phase completion summarizing new capabilities, operational changes, and next priorities.
 

@@ -50,4 +50,16 @@
 - **Governance**: Dev Graph’s rule system (MCP, sprint workflows) is richer than the current project. Harmonization should decide how `.cursor/rules` interoperate with existing `AGENTS.md` hierarchy and what guidance remains relevant once the UI is unified.
 - **User Experience**: Knowledge-Graph’s lightweight CSV workflow is faster to launch for demos, while Dev Graph offers advanced analytics. A unified app must preserve low-friction CSV exploration while exposing multi-database selection for power users.
 
+## Unified Architecture Summary (Most Likely Success Path)
+
+| Layer | Decision | Rationale |
+| --- | --- | --- |
+| Frontend | Adopt Dev Graph Next.js app as the single UI (`apps/dev-graph`) with dataset-aware routes (`/datasets/csv`, `/datasets/neo4j`, `/analytics/*`). | Keeps advanced visualizations and enables SSR/ISR while hosting legacy CSV features. |
+| Data Modes | Maintain in-memory CSV sessions for instant demos; add “Promote to Neo4j” flow that writes to local database via API adaptor. | Satisfies requirement to keep CSVs and support database creation from those files. |
+| Backend | Reuse FastAPI (`services/dev-graph-api`) as orchestration layer for Neo4j ingestion, queries, analytics, and CSV promotion. | Provides robust API surface already battle-tested in Pixel Detective. |
+| Persistence | Run Neo4j locally via Docker (optional profile). Support multiple databases per project to swap datasets quickly. | Enables multi-database workflow while remaining easy to run locally. |
+| Tooling | Provide single launcher script `scripts/start-dev-graph.ps1` with flags: `--mode csv` (UI-only) and `--mode full` (Neo4j + API + UI). | Keeps local setup simple and mirrors “web app” behavior with optional services. |
+| Documentation | Extend production docs with architecture diagram, dataset promotion guide, and multi-database runbook. | Gives stakeholders clarity on operations and long-term maintenance. |
+
+
 
