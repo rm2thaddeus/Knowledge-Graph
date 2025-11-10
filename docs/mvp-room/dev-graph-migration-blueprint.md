@@ -10,8 +10,7 @@
 ```
 Knowledge-Graph/
 ├── apps/
-│   ├── explorer/                 # existing Vite React app moved from `app/`
-│   └── dev-graph-ui/             # Next.js UI migrated from Pixel Detective
+│   └── dev-graph/                # Unified Next.js application (CSV + Neo4j modes)
 ├── services/
 │   └── dev-graph-api/            # FastAPI backend (`developer_graph`)
 ├── infrastructure/
@@ -24,14 +23,14 @@ Knowledge-Graph/
     └── shared-config/            # lint/tsconfig/pytest shared assets
 ```
 
-> **Transition Strategy**: keep current `app/` in place initially; introduce `apps/` alongside it. Once migration stabilizes, relocate legacy code into `apps/explorer/` with symlinks or staged moves to avoid breaking Git history.
+> **Transition Strategy**: stage the Next.js app under `apps/dev-graph` while the current Vite `app/` continues to ship demos. Incrementally port CSV visualization modules into the Next.js codebase; once feature parity is achieved, retire the Vite app and update launch scripts.
 
 ## Directory Mapping
 
-- `Pixel_Detective/tools/dev-graph-ui` ➜ `apps/dev-graph-ui`
+- `Pixel_Detective/tools/dev-graph-ui` ➜ `apps/dev-graph`
   - Preserve `.next` out of repo.
-  - Merge Tailwind configs with explorer app via `tooling/shared-config/tailwind`.
-  - Relocate environment docs into `apps/dev-graph-ui/README.md` (updated for new root paths).
+  - Reorganize routes: `/datasets/csv` for CSV explorer, `/datasets/neo4j` for database-backed views, `/analytics/*` for existing Dev Graph dashboards.
+  - Import Knowledge-Graph Canvas components into `apps/dev-graph/src/features/csv-explorer/`.
 - `Pixel_Detective/developer_graph` ➜ `services/dev-graph-api`
   - Convert PowerShell start scripts into consolidated `scripts/dev-graph-api.ps1`.
   - Move `routes/AGENTS.md` and other nested guides under new path, updating relative references.
@@ -40,19 +39,18 @@ Knowledge-Graph/
 - `Pixel_Detective/docker-compose.yml` ➜ `infrastructure/docker/dev-graph-stack.compose.yml`
   - Compose file will orchestrate Neo4j, optional Qdrant, API, and UI containers.
 - Shared automation (`start_dev_graph.ps1`, `start_pixel_detective.ps1`, `start_backend.ps1`) ➜ rationalized into `scripts/`.
+- Existing Vite `app/` ➜ archived under `archive/vite-csv-explorer` (until removal) to preserve history while preventing duplicate UIs.
 - `.cursor/rules/*.mdc` ➜ merge into `tooling/mcp-rules/` while retaining Knowledge-Graph `AGENTS.md` hierarchy.
 
 ## JavaScript/TypeScript Dependency Alignment
 
-- Align on **Node.js 20 LTS** (covers Vite + Next.js requirements).
-- Introduce `package.json` workspaces:
-  - Root `package.json` managing shared devDependencies (`eslint`, `typescript`, `tailwindcss`).
-  - `apps/explorer/package.json` retains Vite-specific scripts.
-  - `apps/dev-graph-ui/package.json` keeps Next.js scripts (`dev`, `build`, `lint`).
+- Align on **Node.js 20 LTS** for the monorepo.
+- Introduce root-level `package.json` workspace managing shared devDependencies (`eslint`, `typescript`, `tailwindcss`, `@tanstack/react-query`).
+- `apps/dev-graph/package.json` handles Next.js scripts (`dev`, `build`, `lint`, `start`); remove Vite-specific tooling post-migration.
 - Resolve overlapping libraries:
-  - Tailwind config: extract shared base, allow per-app extensions.
-  - ESLint/TS configs: place in `tooling/shared-config` and extend within each app.
-  - Icon libraries (`lucide-react` vs. Chakra icons): keep both initially; note eventual convergence.
+  - Tailwind config: shared base in `tooling/shared-config/tailwind`, with CSV-specific themes merged into Chakra styling via design tokens.
+  - ESLint/TS configs: extend from `tooling/shared-config/eslint-config` and `tsconfig.base.json`.
+  - Icon libraries: consolidate on `lucide-react` for CSV features and map Dev Graph Chakra components to use shared icon adapters.
 
 ## Python/Backend Dependency Alignment
 
@@ -66,11 +64,11 @@ Knowledge-Graph/
 - Root `.gitignore` updates:
   - Exclude `.next/`, `.venv/`, `.mypy_cache/`, `neo4j/data/`, `qdrant/snapshots/`.
 - Add `.env.example` files per app/service:
-  - `apps/dev-graph-ui/.env.local.example` with `NEXT_PUBLIC_DEV_GRAPH_API_URL`.
+  - `apps/dev-graph/.env.local.example` with `NEXT_PUBLIC_DEV_GRAPH_API_URL` and `NEXT_PUBLIC_DEFAULT_DATA_MODE`.
   - `services/dev-graph-api/.env.example` listing `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, ingestion toggles.
 - Centralize start scripts:
-  - `scripts/start-dev-graph.ps1` orchestrating Docker (Neo4j) + API + UI.
-  - `scripts/start-explorer.ps1` for legacy app.
+  - `scripts/start-dev-graph.ps1` orchestrating Docker (Neo4j) + API + unified UI (with `--mode csv` fallback if Neo4j disabled).
+  - `scripts/start-legacy-vite.ps1` retained temporarily for regression testing.
 - Docker Compose:
   - Provide profiles for `dev-graph-api`, `neo4j`, `qdrant` to allow partial starts.
   - Use shared `.env.docker` for credentials.
@@ -83,7 +81,7 @@ Knowledge-Graph/
 
 ## Open Questions
 
-- Whether to migrate Knowledge-Graph explorer into the Dev Graph API (shared data) or keep separate ingestion flows.
+- Confirm deprecation timeline for the legacy Vite app once CSV parity is reached in Next.js.
 - Strategy for Neo4j hosting (local container vs. managed service) and integration with existing CSV workflow.
-- Timeline for merging Tailwind + Chakra design systems or keeping them isolated per app.
+- Finalize design system convergence (Tailwind utility classes vs. Chakra theme tokens) for the unified UI.
 

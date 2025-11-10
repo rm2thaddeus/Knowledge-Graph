@@ -14,16 +14,14 @@ Unify the existing Knowledge-Graph explorer with the Pixel Detective Dev Graph s
 ## Interaction Model
 
 ### Core Services
-- **Dev Graph API (`services/dev-graph-api`)** remains the source of truth, exposing temporal graph, analytics, and ingestion endpoints over FastAPI.
-- **Explorer App (`apps/explorer`)** continues to provide CSV-based visualization but gains optional API-backed modes:
-  - `CSV Mode`: local-only, matches current behavior.
-  - `Graph Mode`: fetches subgraph/timeline data from Dev Graph API.
-- **Dev Graph UI (`apps/dev-graph-ui`)** operates as the advanced analytics front end. It consumes the same API and shares authentication/session context with Explorer when available.
+- **Unified Dev Graph App (`apps/dev-graph`)**: Next.js front end presenting both CSV and Neo4j-backed experiences through dataset-aware routing and shared UI components.
+- **Dev Graph API (`services/dev-graph-api`)**: FastAPI service providing ingestion, analytics, and query endpoints when a Neo4j database is active. The UI proxies through internal API routes to keep client code consistent.
+- **Neo4j Cluster (local Docker-first)**: Hosts temporal graph databases; optional Qdrant integration remains available but disabled by default in local mode.
 
 ### Data Flow Adjustments
-- Introduce an ingestion adaptor that accepts CSV uploads and converts them into Dev Graph ingestion manifests, enabling continuity for existing datasets.
-- Define a shared schema contract (`services/dev-graph-api/schema/knowledge_graph_adapter.py`) translating Explorer node/edge shapes into Neo4j entities.
-- Leverage Neo4j as persistent storage for both apps; Explorer caches live results client-side but can request stored graphs by profile identifier.
+- Introduce an ingestion adaptor that accepts CSV uploads and converts them into Dev Graph ingestion manifests, enabling continuity for existing datasets and feeding multiple databases.
+- Define a shared schema contract (`services/dev-graph-api/schema/knowledge_graph_adapter.py`) translating CSV node/edge shapes into Neo4j entities without losing metadata required for client rendering.
+- Maintain in-memory CSV sessions for quick demos; users can promote sessions to Neo4j databases via a “Create database” flow that triggers the adaptor and refreshes the UI.
 
 ### Auth & Access Control (Future)
 - Short term: local trusted usage (no auth).
@@ -34,16 +32,16 @@ Unify the existing Knowledge-Graph explorer with the Pixel Detective Dev Graph s
 
 | Phase | Scope | Success Criteria |
 | --- | --- | --- |
-| 0. Code Landing | Bring Dev Graph code into repo, compile both apps independently, document setup. | Both UIs run locally; Docker-based Neo4j + API start successfully. |
-| 1. Data Bridge | Build CSV → Dev Graph ingestion adaptor; expose command/script; document workflows. | Same CSV renders in Explorer (legacy) and via API-backed Explorer mode. |
-| 2. Unified Navigation | Add top-level launcher shell (e.g., `/portal`) linking Explorer and Dev Graph UI; share theme and session state. | Single sign-on entry point; consistent branding and navigation between apps. |
+| 0. Code Landing | Bring Dev Graph Next.js + FastAPI code into repo; scaffold unified app shell alongside legacy Vite app. | `apps/dev-graph` boots in CSV mode; Docker-based Neo4j + API start successfully. |
+| 1. Data Bridge | Build CSV → Dev Graph ingestion adaptor; expose command/script; document workflows. | Same CSV renders in-memory and can be promoted to a Neo4j-backed dataset selectable in the UI. |
+| 2. Feature Parity & Navigation | Port legacy CSV canvas, controls, and exports into the unified app; add dataset switcher and navigation to analytics views. | Users can toggle between CSV/Neo4j datasets inside one UI; legacy Vite app marked deprecated. |
 | 3. Operations Hardening | Publish runbooks, monitoring, backup strategy for Neo4j + API; integrate into CI/CD. | Operational readiness checklist complete; automated tests cover ingestion and rendering flows. |
-| 4. Optimization & Refactor | Modify Dev Graph visualizations to incorporate Knowledge-Graph use cases (career mapping) and retire redundant components. | Shared component library, reduced duplication, stakeholder satisfaction metrics met. |
+| 4. Optimization & Refactor | Simplify design system, streamline ingestion UX, and expose multi-database management. | Shared component library, reduced duplication, stakeholder satisfaction metrics met. |
 
 ## Stakeholder Deliverables
 
 1. **Architecture Update** (`docs/production-room/architecture.md` addendum)  
-   - Combined system diagram (Explorer + Dev Graph API + Neo4j).  
+   - Combined system diagram (Unified Dev Graph App + Dev Graph API + Neo4j).  
    - Service responsibilities, data contracts, and deployment topology.
 2. **Migration Roadmap** (executive summary + detailed Gantt in `docs/mvp-room`)  
    - Timeline with dependencies, resource estimates, and checkpoints.
@@ -52,28 +50,27 @@ Unify the existing Knowledge-Graph explorer with the Pixel Detective Dev Graph s
 4. **Risk & Mitigation Register** (`docs/production-room/risk-log.md` new)  
    - Data integrity, dependency conflicts, performance regression risks, fallback plans.
 5. **Adoption Metrics Plan** (`docs/production-room/metrics-plan.md` new)  
-   - KPIs for stakeholder review (API uptime, ingestion throughput, user engagement with both UIs).
+   - KPIs for stakeholder review (API uptime, ingestion throughput, percentage of sessions running in Neo4j mode vs. CSV mode).
 6. **Change Management Packet**  
    - Communication brief for leadership, training plan for analysts, FAQ for support teams.
 
 ## Required Modifications Post-Merge
 
-- **Dev Graph UI**: simplify navigation for Knowledge-Graph personas (career mapping views, CSV import triggers) and align visual branding with Explorer.
-- **Dev Graph API**: add endpoints for ad-hoc datasets (namespaced by user/session), expose simplified graph queries for Explorer, and document rate limits.
-- **Explorer App**: abstract data sources (CSV vs. API), add authentication hooks, and create shared component library for graph legends, controls, and export features.
-- **Tooling**: extend CI to run `npm run lint/build` for both React apps, `pytest` for backend, and container smoke tests.
+- **Unified Dev Graph App**: embed CSV canvas module, provide dataset selector, and harmonize styling across legacy components and Dev Graph dashboards.
+- **Dev Graph API**: add endpoints for ad-hoc datasets (namespaced by user/session), expose simplified graph queries for CSV parity features, and document rate limits.
+- **Tooling**: extend CI to run `npm run lint/build` for the unified Next.js app, `pytest` for backend, and container smoke tests; decommission Vite workflows once parity achieved.
 
 ## Dependencies & Risks
 
 - **Infrastructure Footprint**: Neo4j requires persistent volume management; ensure OneDrive sync does not conflict with database directories.
-- **Dependency Conflicts**: Tailwind vs. Chakra styling, differing TypeScript configs, and Python dependency versions must be reconciled before unified tooling.
+- **Dependency Conflicts**: Tailwind vs. Chakra styling, TypeScript config alignment, and Python dependency versions must be reconciled before unified tooling.
 - **Team Adoption**: Provide training for FastAPI + Neo4j development, and update AGENT/MCP rule hierarchies to reflect the integrated stack.
 
 ## Next Steps
 
 1. Validate the target directory layout with maintainers.  
 2. Author the ingestion adaptor design doc (owner: backend).  
-3. Prototype shared navigation shell; gather UX feedback.  
+3. Prototype dataset selector and CSV→Neo4j promotion flow; gather UX feedback.  
 4. Draft operational runbook skeletons so stakeholders can review early.  
-5. Schedule stakeholder review workshop once Phase 0 completes.
+5. Schedule stakeholder review workshop once Phase 0 completes and legacy UI deprecation timeline is clear.
 
